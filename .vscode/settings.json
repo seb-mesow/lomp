@@ -1,0 +1,16 @@
+{
+    "Lua.diagnostics.disable": [
+        "trailing-space"
+    ],
+    "lua.debug.settings.path": "${workspaceFolder}/test/?.lua;${workspaceFolder}/src/?.lua;${workspaceFolder}/?.lua",
+    "luaTestAdapter.testGlob": "**/test/[tT]est_*.lua",
+    "luaTestAdapter.testRegex": "^\\s*function\\s+(?:[_a-zA-Z][_a-zA-Z0-9]*:)?(?<test>[tT]est[_a-zA-Z0-9]*)\\(\\)(?:.*)$",
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": false,
+    // else would remove whitespace of empty lines between intended lines.
+    "Lua.format.enable": false,
+    "Lua.runtime.version": "Lua 5.3",
+    "lua.debug.settings.luaVersion": "5.3",
+}

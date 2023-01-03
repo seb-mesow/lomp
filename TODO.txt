@@ -1,0 +1,1 @@
+[ ] - ensure, that running and debugging tests in VS Code works
