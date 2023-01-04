@@ -2,7 +2,7 @@
 
 require("test")
 
-local mp_aux = require("lua-only-mp-aux")
+local mp_aux = require("lomp-aux")
 
 function test_host_width()
     local exp_num = 64

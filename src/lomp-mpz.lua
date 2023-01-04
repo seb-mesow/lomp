@@ -1,3 +1,5 @@
+---@diagnostic disable: invisible
+
 local msg = require("lua-only-mp-msg")
 local mp_aux = require("lua-only-mp-aux")
 
@@ -13,12 +15,12 @@ local mpn = require("lua-only-mpn")
 -- (false if positive/zero and true if negative.)
 -- An integer is zero if its field "n" is less than 1
 
+---@version 5.3
 local mpz = {}
 
----@version 5.3
 ---@class mpz
----@field private n integer
----@field private s boolean
+---@field private n integer end index / count of limbs
+---@field private s boolean sign (true if negative, false if positive or zero)
 --- 
 ---@operator shl:mpz
 ---@operator shr:mpz
@@ -31,9 +33,9 @@ local __mpz = {}
 
 local __mpz_meta = { __index = __mpz }
 
----@param self mpz
----
----@return boolean is_valid_ignore_sign whether the mpz is valid, ignoring the sign
+--- asserts, that the `mpz` complies with the specification
+--- But the sign is not checked.
+---@return boolean ok whether the `mpz` is valid, ignoring the sign
 function __mpz:__is_valid_ignore_sign()
     local ok = true
     ---@type integer|nil
@@ -196,6 +198,9 @@ function __mpz:__is_valid_ignore_sign()
     return ok
 end
 
+--- asserts, that the sign of the ``mpz` complies with the specification
+---
+---@return boolean ok whether the sign is valid
 function __mpz:__is_valid_sign()
     local ok = true
     local self_s = self.s
@@ -225,8 +230,11 @@ function __mpz:__is_valid_sign()
     return ok
 end
 
--- checks if an Integer is well formed according to the previous definition
--- but contains no sign yet
+--- asserts, that the `mpz` complies with the specification
+--- 
+--- The sign is not checked and no expected:
+--- If the `mpz` has a sign, then a warning is raised.
+---@return boolean ok whether the `mpz` is valid without the sign
 function __mpz:__is_valid_excl_sign()
     local ok = __mpz.__is_valid_ignore_sign(self)
     local self_s = self.s
@@ -244,7 +252,8 @@ function __mpz:__is_valid_excl_sign()
     return ok
 end
 
--- checks if an Integer is well formed according to the previous definition
+--- asserts, that the `mpz` fully complies with the specification
+---@return boolean ok whether the `mpz` is fully valid
 function __mpz:__is_valid()
     local ok = __mpz.__is_valid_ignore_sign(self)
     ok = __mpz.__is_valid_sign(self) and ok
@@ -255,11 +264,15 @@ function __mpz:__is_valid()
 end
 
 
--- internal constructor:
--- creates a new number from an integer
--- Postconditions:
---      self:__is_valid()
-function __mpz.__new_impl(int)
+--- creates a new `mpz` from a Lua integer
+---
+---@param int integer Lua integer
+---
+---@return mpz new_mpz constructed `mpz` object
+--- 
+--- Postconditions:
+--- - `new_mpz:__is_valid()`
+function mpz.__new_impl(int)
     local self = setmetatable({}, __mpz_meta)
     if int < 0 then
         self.s = true
@@ -287,21 +300,34 @@ function __mpz.__new_impl(int)
     return self
 end
 
--- Constructor:
--- constructs an Integer, floats are rounded in an undefined way
+---constructs a `mpz` from a Lua Integer
+---
+---@param int integer Lua integer
+---
+---@nodiscard
+---@return mpz new_mpz constructed `mpz` object
+---
+--- Postconditions:
+--- - `new_mpz:__is_valid()`
 function mpz.new(int)
     if math.type(int) == "integer" then
-        return __mpz.__new_impl(int)
+        return mpz.__new_impl(int)
     end
     msg.error("argument must be an integer"
             .." (neither a float nor something other)")
 end
 
--- Preconditons:
---     self:__is_valid_excl_sign()
--- Postconditons:
---     copy:__is_valid_excl_sign()
-function mpz:__copy_abs()
+--- deep copies the absolute value
+---
+---@nodiscard
+---@return mpz abs_copy deep copy with the absolute value
+--- 
+--- Preconditons:
+--- - `self:__is_valid_excl_sign()`
+---
+--- Postconditons:
+--- - `copy:__is_valid_excl_sign()`
+function __mpz:__copy_abs()
     local copy = setmetatable({
         n = self.n ;
     }, __mpz_meta)
@@ -321,23 +347,43 @@ end
 
 -- We must provided them as functions, because as returned tables,
 -- they may be changed after returning them.
+
+---@deprecated
+---@return mpz zero `mpz` with the value 0 (has a sign)
 function mpz.ZERO()
     return setmetatable({ s = false ; n = 0 ; }, __mpz_meta)
 end
+
+---@deprecated
+---@return mpz one positive `mpz` with the value 1
 function mpz.ONE()
     return setmetatable({ s = false ; n = 1 ; [0] = 1 }, __mpz_meta)
 end
+
+---@deprecated
+---@return mpz abs_one `mpz` with **no sign** and the absolute value 1
 function mpz.ABS_ONE()
     return setmetatable({ n = 1 ; [0] = 1 }, __mpz_meta)
 end
 
 
--- Postconditions:
---      obj:__is_valid()
-function mpz.__ensure_is_Integer(obj)
+--- returns a `mpz` with the same value as its argument
+---
+---@param obj mpz|integer operand
+---
+---@return mpz obj_mpz operand as `mpz`
+--- 
+--- Preconditons:
+--- - if `obj` is of type `mpz`, then `obj:__is_valid()`
+--- 
+--- Postconditions:
+--- - `obj_mpz:__is_valid()`
+function mpz.__ensure_is_mpz(obj)
     if getmetatable(obj) == __mpz_meta then
+        ---@cast obj mpz
         return obj
     end
+    ---@cast obj integer
     return mpz.new(obj)
 end
 
@@ -360,15 +406,19 @@ function mpz:__debug_string(mpn_debug_string_func)
     return str.." "..mpn_debug_string_func(self, 0, self.n)
 end
 
+---@return string
 function mpz:debug_string_bin()
     return mpz.__debug_string(self, mpn.debug_string_bin)
 end
+---@return string
 function mpz:debug_string_oct()
     return mpz.__debug_string(self, mpn.debug_string_oct)
 end
+---@return string
 function mpz:debug_string_dec()
     return mpz.__debug_string(self, mpn.debug_string_dec)
 end
+---@return string
 function mpz:debug_string_hex()
     return mpz.__debug_string(self, mpn.debug_string_hex)
 end
@@ -378,16 +428,17 @@ __mpz_meta.__tostring = mpz.debug_string -- conversion to string with tostring()
 
 
 
---- tries to convert a Lua integer into a mpz<br>
---- If the mpz does not fit into a Lua integer, returns nil.
+--- tries to convert a Lua integer into a mpz<
 ---
---- Preconditons:
---- - `self:__is_valid()`
+--- If the mpz does not fit into a Lua integer, returns nil.
 ---
 ---@param self mpz
 ---
 ---@nodiscard
 ---@return integer|nil lua_int Lua Integer
+--- 
+--- Preconditons:<br>
+--- - `self:__is_valid()`
 function __mpz:try_to_lua_int()
     assert( self:__is_valid() )-- DEBUG
     local int = mpn.try_to_lua_int(self, 0, self.n)
@@ -408,14 +459,19 @@ function __mpz:try_to_lua_int()
     return int
 end
 
--- returns a Lua integer from the natural integer
--- If the natural integer does not fit into a Lua integer,
--- raises a warning and returns math.maxinteger resp. math.mininteger
--- Preconditons:
---     self:__is_valid()
+--- converts a `mpz` to a Lua integer
+--- 
+--- If the `mpz` does not fit into a Lua integer,
+--- raises a warning and returns `math.maxinteger` resp. `math.mininteger`
+--- according to the sign of the `mpz`
+--- 
+---@return integer lua_int Lua_integer
+--- 
+--- Preconditons:
+--- - `self:__is_valid()`
 function __mpz:to_lua_int()
     assert( self:__is_valid() )-- DEBUG
-    local int = mpz.try_to_lua_int(self)
+    local int = __mpz.try_to_lua_int(self)
     if rawequal(int, nil) then
         local int_descr
         if self.s then
@@ -428,19 +484,28 @@ function __mpz:to_lua_int()
                 .."\nThe too big mpz is:\n%s",
                   int_descr, self)
     end
+    ---@cast int -nil
     return int
 end
 
--- compares two integers
--- if self <  other, return -1
--- if self == other, return  0
--- if self >  other, return +1
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
+--- compares two integers
+---
+--- returns -1 if `self <  other`<br>
+--- returns  0 if `self == other`<br>
+--- returns +1 if `self >  other`
+--- 
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return integer cmp_res integer descriping the relation of self to other
+--- 
+--- Preconditions:
+--- - `self:__is_valid()`
+--- - `other:__is_valid()`
 function mpz:cmp(other)
-    self  = mpz.__ensure_is_Integer(self )
-    other = mpz.__ensure_is_Integer(other)
+    self  = mpz.__ensure_is_mpz(self )
+    other = mpz.__ensure_is_mpz(other)
     if self.s then
         if other.s then
             return mpn.cmp(other, 0, other.n,
@@ -459,29 +524,72 @@ function mpz:cmp(other)
 end
 -- cmp() not provided as member function by intention
 
+--- less operator `<`
+---
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return boolean is_less_or_equal whether the 1st operand is strictly less than the 2nd operand
 function mpz:less(other)
     return mpz.cmp(self, other) == -1
 end
+
+--- less equal operator `<=`
+--- 
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return boolean is_less_or_equal whether the 1st operand is less than or equals the 2nd operand
 function mpz:less_equal(other)
     return mpz.cmp(self, other) ~= 1
 end
+
+--- equal operator `==`
+---
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return boolean are_equal whether both operands are equal
 function mpz:equal(other)
     return mpz.cmp(self, other) == 0
 end
+
+--- greater equal operator `>=`
+--- 
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return boolean is_greater_or_equal whether the 1st operand is greater than or equals the 2nd operand
 function mpz:greater_equal(other)
     return mpz.cmp(self, other) ~= -1
 end
+
+--- greater operator `>`
+---
+---@param self  mpz|integer 1st operand
+---@param other mpz|integer 2nd operand
+---
+---@nodiscard
+---@return boolean is_greater whether the 1st operand is strictly greater than the 2nd operand
 function mpz:greater(other)
     return mpz.cmp(self, other) == 1
 end
 
--- deep copy
--- Preconditons:
---     self:__is_valid()
--- Postconditions:
---     copy:__is_valid()
---     copy == self
-function mpz:copy()
+--- creates a deep copy
+---
+---@return mpz copy deep copy
+---
+--- Preconditons:
+--- - `self:__is_valid()`
+--- 
+--- Postconditions:
+--- - `copy:__is_valid()`
+--- - `copy == self`
+function __mpz:copy()
     assert( self:__is_valid() , "self")-- DEBUG
     local copy = setmetatable({ s = self.s }, __mpz_meta)
     copy.n = mpn.copy(copy, 0, -- destination
@@ -490,10 +598,15 @@ function mpz:copy()
     assert( mpz.equal(self, copy) , "copy")-- DEBUG
     return copy
 end
-__mpz.copy = mpz.copy
 
--- absolute value
-function mpz:abs()
+--- computes the absolute value
+---
+---@nodiscard
+---@return mpz abs_copy the absolute value of `self`
+---
+--- Postconditions:
+--- - `abs_copy:__is_valid()`
+function __mpz:abs()
     assert( self:__is_valid() , "self")-- DEBUG
     local copy = setmetatable({ s = false }, __mpz_meta)
     copy.n = mpn.copy(copy, 0, -- destination
@@ -501,14 +614,17 @@ function mpz:abs()
     assert( copy:__is_valid() , "copy")-- DEBUG
     return copy
 end
-__mpz.abs = mpz.abs
 
--- unary negation operator
--- Preconditions:
---     self:__is_valid()
--- Postconditions:
---     copy:__is_valid()
-function mpz:neg()
+--- unary negation operator
+--- 
+---@param self mpz
+---
+---@nodiscard
+---@return mpz neg_copy the negative of `self`
+--- 
+--- Postconditions:
+--- - `neg_copy:__is_valid()`
+function __mpz_meta:__unm()
     assert( self:__is_valid() , "self")-- DEBUG
     local copy = setmetatable({}, __mpz_meta)
     copy.n = mpn.copy(copy, 0, -- destination
@@ -521,11 +637,19 @@ function mpz:neg()
     assert( copy:__is_valid() , "copy")-- DEBUG
     return copy
 end
-__mpz.neg = mpz.neg
-__mpz_meta.__unm = mpz.neg
 
--- shifts an integer by s bits to the left
--- This may add limbs at the most significant end.
+--- shift strictly to the left
+--- This may add limbs at the most significant end.
+---
+---@param self mpz operand to shift left
+---@param res table table to store the result in (must already be declared as `mpz`)
+---@param s integer bit positions to shift left (must be positive)
+---
+--- Preconditons:
+--- - `s > 0`
+---
+--- Postconditions:
+--- - `res:__is_valid()`
 function mpz:__lshift(res, s)
     assert( s > 0 )-- DEBUG
     local n = mpn.lshift_many_unbounded(res, 0, -- destination
@@ -538,11 +662,22 @@ function mpz:__lshift(res, s)
     else
         res.n = n
     end
-    return res
+    -- return res
 end
 
--- shifts an integer by s bits to the right
--- This may discards some limbs at the least significant end
+--- shift strictly to the right
+--- 
+--- This may discards some limbs at the least significant end
+---
+---@param self mpz operand to shift right
+---@param res table table to store the result in (must already be declared as `mpz`)
+---@param s integer bit positions to shift left (must be positive)
+---
+--- Preconditons:
+--- - `s > 0`
+---
+--- Postconditions:
+--- - `res:__is_valid()`
 function mpz:__rshift(res, s)
     assert( s > 0 )-- DEBUG
     -- local n = mpn.rshift_many_bounded(
@@ -561,10 +696,22 @@ function mpz:__rshift(res, s)
     else
         res.n = n
     end
-    return res
+    -- return res
 end
 
-function mpz:lshift(s)
+--- left shifting operator `<<`
+--- 
+--- Actually shifts to the right if the shift amount is negative.
+---
+---@param self mpz operand to shift
+---@param s integer count of bit positions to shift to the left
+---
+---@nodiscard
+---@return mpz res
+---
+--- Postconditions:
+--- - `res:__is_valid()`
+function __mpz_meta:__shl(s)
     assert( math.type(s) == "integer", "shift amount must be an integer.")
     assert( self:__is_valid() , "self")-- DEBUG
     if (self.n < 1) or (s == 0) then
@@ -585,10 +732,20 @@ function mpz:lshift(s)
     assert( res:__is_valid() , "res")-- DEBUG
     return res
 end
-__mpz.lshift = mpz.lshift
-__mpz_meta.__shl = mpz.lshift
 
-function mpz:rshift(s)
+--- right shifting operator `>>`
+--- 
+--- Actually shifts to the left if the shift amount is negative.
+---
+---@param self mpz operand to shift
+---@param s integer count of bit positions to shift to the right
+---
+---@nodiscard
+---@return mpz res
+---
+--- Postconditions:
+--- - `res:__is_valid()`
+function __mpz_meta:__shr(s)
     assert( math.type(s) == "integer", "shift amount must be an integer.")
     assert( self:__is_valid() , "self")-- DEBUG
     if (self.n < 1) or (s == 0) then
@@ -609,9 +766,24 @@ function mpz:rshift(s)
     assert( res:__is_valid() , "res")-- DEBUG
     return res
 end
-__mpz.rshift = mpz.rshift
-__mpz_meta.__shr = mpz.rshift
 
+
+--- implementation of addition
+--- 
+--- The sign of the returned `sum` equals the sign of the parameter `self`.
+---
+---@param self  mpz 1st summand
+---@param other mpz 2nd summand
+---
+---@nodiscard
+---@return mpz sum sum
+---
+--- Preconditions:
+--- - `self:__is_valid_excl_sign()`
+--- - `other:__is_valid_excl_sign()`
+--- 
+--- Postconditions:
+--- - `sum:__is_valid_excl_sign()`
 function mpz:__add_impl(other)
     local res = setmetatable({}, __mpz_meta)
     
@@ -634,24 +806,33 @@ function mpz:__add_impl(other)
     return res
 end
 
--- from the absolute value of self subtracts the absolute value of other
--- In contrast to __add_abs() it also sets the sign
--- Preconditions:
---     self:__is_valid_excl_sign()
---     other:__is_valid_excl_sign()
--- Postconditions:
---     res:__is_valid()
+--- implementation of subtraction
+--- 
+--- also sets the sign of the returend `diff`
+---
+---@param self  mpz subtrahend / 1st operand
+---@param other mpz minuend    / 2nd operand
+---
+---@nodiscard
+---@return mpz diff directed difference
+---
+--- Preconditions:
+--- - `self:__is_valid_excl_sign()`
+--- - `other:__is_valid_excl_sign()
+--- 
+--- Postconditions:
+--- - `diff:__is_valid()`
 function mpz:__sub_impl(other)
     local res = setmetatable({}, __mpz_meta)
     
     res.n, res.s = mpn.difference(res, 0, -- destination
-                                self, 0, self.n, -- 1st source
-                                other, 0, other.n, -- 2nd source
-                                0) -- right incoming borrow
+                                  self, 0, self.n, -- 1st source
+                                  other, 0, other.n, -- 2nd source
+                                  0) -- right incoming borrow
     
     -- TODO avoid that an Integer must be minimal
     -- minimize result
-    n = res.n -1
+    local n = res.n -1
     while n >= 0 and res[n] <= 0 do
         res[n] = nil
         n = n -1
@@ -662,17 +843,21 @@ function mpz:__sub_impl(other)
     return res
 end
 
--- addition
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpz:add(other)
-    self = mpz.__ensure_is_Integer(self)
-    other = mpz.__ensure_is_Integer(other)
+--- addition operator `+`
+---
+---@param self  mpz|integer 1st summand
+---@param other mpz|integer 2nd summand
+---
+---@nodiscard
+---@return mpz sum sum
+--- 
+--- Postconditions:
+--- - `sum:__is_valid()`
+function __mpz_meta:__add(other)
+    self  = mpz.__ensure_is_mpz(self )
+    other = mpz.__ensure_is_mpz(other)
     
-    -- In the comments s and o are the absolute values of self and other. 
+    -- In the comments s and o are the absolute values of self and other.
     
     local self_s = self.s
     if self_s == other.s then
@@ -690,17 +875,22 @@ function mpz:add(other)
     -- ( +s + -o == s - o with s >= 0 and o >= 1 )
     return mpz.__sub_impl(self, other)
 end
-__mpz_meta.__add = mpz.add
 
--- subtraction
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpz:sub(other)
-    self = mpz.__ensure_is_Integer(self)
-    other = mpz.__ensure_is_Integer(other)
+--- subtraction operator `-`
+---
+---@param self  mpz|integer minuend    / 1st operand
+---@param other mpz|integer subtrahend / 2nd operand
+---
+---@nodiscard
+---@return mpz diff directed difference
+--- 
+--- Postconditions:
+--- - `diff:__is_valid()`
+function __mpz_meta:__sub(other)
+    self  = mpz.__ensure_is_mpz(self )
+    other = mpz.__ensure_is_mpz(other)
+    
+    -- In the comments s and o are the absolute values of self and other.
     
     local self_s = self.s
     if self_s ~= other.s then
@@ -718,17 +908,20 @@ function mpz:sub(other)
     -- ( +s - +o == s - o with s >= 0 and o >= 0 )
     return mpz.__sub_impl(self, other)
 end
-__mpz_meta.__sub = mpz.sub
 
--- multiplication
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpz:mul(other)
-    self = mpz.__ensure_is_Integer(self)
-    other = mpz.__ensure_is_Integer(other)
+--- multiplication operator `*`
+---
+---@param self  mpz|integer 1st factor
+---@param other mpz|integer 2nd factor
+---
+---@nodiscard
+---@return mpz prod product
+---
+--- Postconditions:
+--- - `res:__is_valid()`
+function __mpz_meta:__mul(other)
+    self  = mpz.__ensure_is_mpz(self )
+    other = mpz.__ensure_is_mpz(other)
     
     local res = mpz.__mul_abs(self, other)
     
@@ -751,17 +944,27 @@ function mpz:mul(other)
     assert(res:__is_valid_sign())-- DEBUG
     return res
 end
-__mpz_meta.__mul = mpz.mul
 
--- divides the absolute values |self| / |other|
--- If the quotient is zero, then it also sets the sign
--- In contrast to the Lua specification it rounds to zero (and not towards minus infinity)
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     if self.n < 1 then res:__is_valid_()
---     else               res:__is_valid_excl_sign()
+---@deprecated
+--- divides the absolute values |self| / |other|
+---
+--- If the quotient is zero, then it also sets the sign.
+--- 
+--- In contrast to the Lua specification it rounds to zero (and not towards minus infinity)
+---
+---@param self  mpz dividend
+---@param other mpz divisor
+---
+---@nodiscard
+---@return mpz quot quotient
+---
+--- Preconditions:
+--- - `self:__is_valid()`
+--- - `other:__is_valid()`
+---
+--- Postconditions:
+--- - if `self.n < 1`, then `res:__is_valid_()`,
+---   else                 `res:__is_valid_excl_sign()`
 function mpz:__div_abs(other)
     if other.n < 1 then
         msg.error("Tried to divide by zero.")
@@ -791,15 +994,21 @@ function mpz:__div_abs(other)
     end
 end
 
--- division
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpz:div(other)
-    self = mpz.__ensure_is_Integer(self)
-    other = mpz.__ensure_is_Integer(other)
+--- floor division operator `//`
+---
+--- rounds the quotient **towards zero** !
+---
+---@param self  mpz|integer dividend / 1st operand
+---@param other mpz|integer divisor  / 2nd operand
+---
+---@nodiscard
+---@return mpz quot quotient rounded **towards zero**
+---
+--- Postconditions:
+--- - `quot:__is_valid()`
+function __mpz_meta:__idiv(other)
+    self = mpz.__ensure_is_mpz(self)
+    other = mpz.__ensure_is_mpz(other)
     
     local res = mpz.__div_abs(self, other)
     if res.n ~= 0 then
@@ -818,16 +1027,27 @@ function mpz:div(other)
     
     return res
 end
-__mpz_meta.__idiv = mpz.div
 
--- square root
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpz:sqrt()
-    self = mpz.__ensure_is_Integer(self)
+--- integer square root
+---
+--- computes the greatest integer whose sqaure is less than or equals `self`
+---
+--- TODO
+---
+---@param self mpz
+---
+---@nodiscard
+---@return mpz sqrt integer square root
+---
+--- Preconditions:
+--- - `self:__is_valid()`
+--- - `other:__is_valid()`
+--- 
+--- Postconditions:
+--- - `res:__is_valid()`
+--- - `res^2 <= self`
+function __mpz:sqrt()
+    self = mpz.__ensure_is_mpz(self)
     
     if self.s then
         msg.error("Tried to take the square root of a negative number.")
@@ -843,7 +1063,16 @@ local DIGITS_UPPERCASE = {
 local DIGITS_LOWERCASE = {
     [0] = "0";"1";"2";"3";"4";"5";"6";"7";"8";"9";"a";"b";"c";"d";"e";"f"}
 
--- converts an Integer to a decimal string
+--- format as a string of decimal digits (0-9)
+--- 
+--- The minus character '-' is prefixed, if `self` is negative.
+--- 
+--- If `self` is zero, then the string `"0"` is returned.
+---
+---@param self mpz
+---
+---@nodiscard
+---@return string dec_str
 function __mpz:dec()
     if self.n == 0 then
         return "0"
@@ -904,7 +1133,7 @@ function __mpz:dec()
     return (self.s and "-" or "")..string.sub(str, temp)
 end
 
--- converts an Integer to a decimal string
+---@deprecated
 function mpz.__str_in_pow_of_2_radix(self, bits_per_digit, digit_mask, digits)
     local self_n = self.n
     if self_n == 0 then
@@ -954,19 +1183,44 @@ function mpz.__str_in_pow_of_2_radix(self, bits_per_digit, digit_mask, digits)
     return (self.s and "-" or "")..str
 end
 
+--- format as a string of hexadecimal digits with letters in uppercase (0-F)
+--- 
+--- The minus character '-' is prefixed, if `self` is negative.
+--- 
+---@param self mpz
+---
+---@nodiscard
+---@return string hex_str
 function __mpz:hex()
     return mpz.__str_in_pow_of_2_radix(self, 4, 0xF, DIGITS_UPPERCASE)
 end
-mpz.hex = __mpz.hex
 
+--- format as a string of hexadecimal digits with letters in lowercase (0-f)
+--- 
+--- The minus character '-' is prefixed, if `self` is negative.
+--- 
+--- If `self` is zero, then the string `"0"` is returned.
+---
+---@param self mpz
+---
+---@nodiscard
+---@return string hex_lowercase_str
 function __mpz:hex_lowercase()
     return mpz.__str_in_pow_of_2_radix(self, 4, 0xF, DIGITS_LOWERCASE)
 end
-mpz.hex_lowercase = __mpz.hex_lowercase
 
+--- format as a string of octal digits (0-7)
+--- 
+--- The minus character '-' is prefixed, if `self` is negative.
+--- 
+--- If `self` is zero, then the string `"0"` is returned.
+---
+---@param self mpz
+---
+---@nodiscard
+---@return string oct_str
 function __mpz:oct()
     return mpz.__str_in_pow_of_2_radix(self, 3, 7, DIGITS_UPPERCASE)
 end
-mpz.oct = __mpz.oct
 
 return mpz

@@ -1,10 +1,10 @@
----@diagnostic disable: lowercase-global, cast-local-type
+---@diagnostic disable: lowercase-global
 
 require("test")
 
-local mp_aux = require("lua-only-mp-aux")
-local mpz = require("lua-only-mpz")
-local mpn = require("lua-only-mpn")
+local mp_aux = require("lomp-aux")
+local mpz = require("lomp-mpz")
+local mpn = require("lomp-mpn")
 
 local RADIX = mpn.limb_radix()
 local WIDTH = mpn.limb_width()

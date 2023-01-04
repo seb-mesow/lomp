@@ -5,3 +5,6 @@
 - [ ] badge with the licence
 - [ ] continous integration (automated testing)
 - [ ] badge with the build status
+- [ ] combined assignments (+= <<= *= ...)
+- [ ] increment/decrement (++ --)
+- [ ] bitwise operators
