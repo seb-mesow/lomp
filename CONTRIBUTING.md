@@ -26,4 +26,4 @@ The conversion to the native Test API seems to not work satisfying. -->
 
 ## Code Formatting
 
-All code is **formatted manually**. Please tunr off any code formatting/refactoring features.
+All code is **formatted manually**. Please turn off any code formatting/refactoring features.

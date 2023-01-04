@@ -1,4 +1,6 @@
-===== Floating-Point Numbers
+# Floating-Point Numbers
+
+**This is only a first sketch!**
 
 The addition algorithm loops in low-high order over the augend and addend.
 
