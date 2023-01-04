@@ -157,19 +157,19 @@ function test_try_to_lua_int()
     -- only special tests of try_to_lua_int()
     local function test_case(int, exp_num)
         --TEST_MSG_ON()
-        TEST_OP_NAME("mpz:try_to_lua_int()   (only special values)")
-        BEGIN_TEST_DATA()
-        TEST_DATUM("int", int)
-        TEST_DATUM("exp_num", exp_num)
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME("mpz:try_to_lua_int()   (only special values)")
+        -- BEGIN_TEST_DATA()
+        -- TEST_DATUM("int", int)
+        -- TEST_DATUM("exp_num", exp_num)
+        -- BEGIN_TEST_CASE()
         -- All nums are of course Lua integers
         -- Thus every corresponding int must be convertable to a Lua integer -
         -- including math.mininteger
-        BEGIN_TEST_OP()
+        --BEGIN_TEST_OP()
         local res_num = int:try_to_lua_int()
-        END_TEST_OP()
+        --END_TEST_OP()
         assert_equals(res_num, exp_num)
-        END_TEST_CASE() ; END_TEST_DATA()
+        --END_TEST_CASE() ; END_TEST_DATA()
     end
     
     local mpz_from_math_maxinteger = mpz.new(math.maxinteger)
@@ -264,7 +264,7 @@ function test_comparision_operators()
         __test_case(self.int, compare_result, other.int)
     end
     
-    -- It is engough to test much fewer pairs,
+    -- It is enough to test much fewer pairs,
     -- because we test mpz.cmp() seperately,
     -- which avoids calling mpz.cmp() five times per pair 
     local two_digits_num = RADIX + 1
@@ -277,15 +277,15 @@ end
 function test_copy()
     local function test_case(num, int)
         --TEST_MSG_ON()
-        TEST_OP_NAME("mpz:copy()")
-        BEGIN_TEST_CASE()
-        BEGIN_TEST_OP()
+        -- TEST_OP_NAME("mpz:copy()")
+        -- BEGIN_TEST_CASE()
+        -- BEGIN_TEST_OP()
         local res_int = int:copy()
-        END_TEST_OP()
+        -- END_TEST_OP()
         local res_num = res_int:try_to_lua_int()
         -- assert_true( mpz.equal(res_int, int))
         assert_equals(res_num, num)
-        END_TEST_CASE()
+        -- END_TEST_CASE()
     end
     
     apply_on_tuples(test_case)
@@ -294,24 +294,24 @@ end
 function test_abs()
     local function test_case(num, int)
         --TEST_MSG_ON()
-        TEST_OP_NAME("mpz:abs()")
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME("mpz:abs()")
+        -- BEGIN_TEST_CASE()
         local exp_num = math.abs(num)
         if exp_num < 0 then
             assert( num == math.mininteger )
             local int_a = mpz.new(math.mininteger)
-            BEGIN_TEST_OP()
+            -- BEGIN_TEST_OP()
             local int_b = int_a:abs()
-            END_TEST_OP()
+            -- END_TEST_OP()
             assert_true( mpz.equal(int_b, -int_a) )
         else
-            BEGIN_TEST_OP()
+            -- BEGIN_TEST_OP()
             local res_int = int:abs()
-            END_TEST_OP()
+            -- END_TEST_OP()
             local res_num = res_int:to_lua_int()
             assert_equals(res_num, exp_num)
         end
-        END_TEST_CASE()
+        -- END_TEST_CASE()
     end
     
     apply_on_tuples(test_case)
@@ -320,24 +320,24 @@ end
 function test_neg()
     local function test_case(num, int)
         --TEST_MSG_ON()
-        TEST_OP_NAME("unary negation operator")
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME("unary negation operator")
+        -- BEGIN_TEST_CASE()
         local exp_num = -num
         if ((exp_num < 0) == (num < 0)) and (num ~= 0) then
             assert( num == math.mininteger )
             local int_a = mpz.new(math.maxinteger) + 1
-            BEGIN_TEST_OP()
+            -- BEGIN_TEST_OP()
             local int_b = - (mpz.new(math.mininteger))
-            END_TEST_OP()
+            -- END_TEST_OP()
             assert_true( mpz.equal(int_b, int_a) )
         else
-            BEGIN_TEST_OP()
+            -- BEGIN_TEST_OP()
             local res_int = -int
-            END_TEST_OP()
+            -- END_TEST_OP()
             local res_num = res_int:to_lua_int()
             assert_equals(res_num, exp_num)
         end
-        END_TEST_CASE()
+        -- END_TEST_CASE()
     end
     
     apply_on_tuples(test_case)
@@ -346,10 +346,10 @@ end
 function test_shift()
     local function test_case__lshift(num_arg, int, s)
         --TEST_MSG_ON()
-        TEST_OP_NAME("<< operator")
-        BEGIN_TEST_DATA()
-        TEST_DATUM("s", s)
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME("<< operator")
+        -- BEGIN_TEST_DATA()
+        -- TEST_DATUM("s", s)
+        -- BEGIN_TEST_CASE()
         local exp_num
         if num_arg < 0 then
             num = -num_arg
@@ -357,23 +357,32 @@ function test_shift()
             num = num_arg
         end
         -- We assume an infinite word width (to the left)
-        if num < 0 then END_TEST_CASE() ; END_TEST_DATA() ; return end
+        if num < 0 then
+            -- END_TEST_CASE()
+            -- END_TEST_DATA()
+            return
+        end
         -- if abs(num_arg) has bits, that would be shifted out left
         if (s > 0) and (num & (-1 << (HOST_WIDTH-s))) ~= 0 then
             exp_num = nil
         else
             exp_num = num << s
-            if exp_num < 0 then END_TEST_CASE() ; END_TEST_DATA(); return end
+            if exp_num < 0 then
+                -- END_TEST_CASE()
+                -- END_TEST_DATA()
+                return
+            end
             if num_arg < 0 then
                 exp_num = -exp_num
             end
         end
-        BEGIN_TEST_OP()
+        -- BEGIN_TEST_OP()
         local res_int = int << s
-        END_TEST_OP()
+        -- END_TEST_OP()
         local res_num = res_int:try_to_lua_int()
         assert_equals(res_num, exp_num)
-        END_TEST_CASE() ; END_TEST_DATA()
+        -- END_TEST_CASE()
+        -- END_TEST_DATA()
     end
     
     local function test_case__rshift(num_arg, int, s)
@@ -412,15 +421,14 @@ function test_shift()
     if shift_step < 1 then
         shift_step = 1
     end
-    --shift_step = 1
     
     local function test_cases(num, int)
         local s = 0
         repeat
             test_case__lshift(num, int,  s)
             test_case__lshift(num, int, -s)
-            --test_case__rshift(num, int,  s)
-            --test_case__rshift(num, int, -s)
+            test_case__rshift(num, int,  s)
+            test_case__rshift(num, int, -s)
             s = s + shift_step
         until s > HOST_WIDTH
     end
@@ -431,8 +439,8 @@ end
 function test_add_sub()
     local function test_case(self, other)
         --TEST_MSG_ON()
-        TEST_OP_NAME("+ operator")
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME("+ operator")
+        -- BEGIN_TEST_CASE()
         local exp_num = self.num + other.num
         if ((self.num < 0) == (other.num < 0)) -- detect wrapping around
         and ((exp_num < 0) ~= (self.num < 0)) then
@@ -441,7 +449,7 @@ function test_add_sub()
         local res_int = self.int + other.int
         local res_num = res_int:try_to_lua_int()
         assert_equals(res_num, exp_num)
-        END_TEST_CASE()
+        -- END_TEST_CASE()
     end
     
     apply_on_pairs(test_case)
@@ -577,13 +585,13 @@ end
 __build_sorted_sequence_and_test_new_and_test_try_to_lua_int()
 
 os.exit( lu.LuaUnit.run(
-    "-p", "test_"
-    "-p", "to_lua_int"
+    -- "-p", "test_"
+     "-p", "to_lua_int"
     ,"-p", "cmp"
     ,"-p", "comparision_operators"
     ,"-p", "copy"
     ,"-p", "abs"
     ,"-p", "neg"
     ,"-p", "shift"
-    ,"-p", "add_sub"
+    -- ,"-p", "add_sub"
 ))

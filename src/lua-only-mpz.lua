@@ -13,12 +13,30 @@ local mpn = require("lua-only-mpn")
 -- (false if positive/zero and true if negative.)
 -- An integer is zero if its field "n" is less than 1
 
-local   mpz = {}
+local mpz = {}
+
+---@version 5.3
+---@class mpz
+---@field private n integer
+---@field private s boolean
+--- 
+---@operator shl:mpz
+---@operator shr:mpz
+---@operator unm:mpz
+---@operator add:mpz
+---@operator sub:mpz
+---@operator mul:mpz
+---@operator idiv:mpz
 local __mpz = {}
+
 local __mpz_meta = { __index = __mpz }
 
+---@param self mpz
+---
+---@return boolean is_valid_ignore_sign whether the mpz is valid, ignoring the sign
 function __mpz:__is_valid_ignore_sign()
     local ok = true
+    ---@type integer|nil
     local self_n = self.n -- must be set to nil if self.n is zero
     
     -- check type
@@ -241,11 +259,12 @@ end
 -- creates a new number from an integer
 -- Postconditions:
 --      self:__is_valid()
-function mpz.__new_impl(int)
+function __mpz.__new_impl(int)
     local self = setmetatable({}, __mpz_meta)
     if int < 0 then
         self.s = true
         int = -int
+        -- In modular arithmetic math.mininteger is its own negative (as also 0)
         if int < 0 then -- handle math.mininteger special
             assert( (int-1) == math.maxinteger )-- DEBUG
             assert( (int-1) >= 0 )-- DEBUG
@@ -272,7 +291,7 @@ end
 -- constructs an Integer, floats are rounded in an undefined way
 function mpz.new(int)
     if math.type(int) == "integer" then
-        return mpz.__new_impl(int)
+        return __mpz.__new_impl(int)
     end
     msg.error("argument must be an integer"
             .." (neither a float nor something other)")
@@ -359,11 +378,17 @@ __mpz_meta.__tostring = mpz.debug_string -- conversion to string with tostring()
 
 
 
--- returns a Lua integer from the mpz
--- If the mpz does not fit into a Lua integer, returns nil.
--- Preconditons:
---     self:__is_valid()
-function mpz:try_to_lua_int()
+--- tries to convert a Lua integer into a mpz<br>
+--- If the mpz does not fit into a Lua integer, returns nil.
+---
+--- Preconditons:
+--- - `self:__is_valid()`
+---
+---@param self mpz
+---
+---@nodiscard
+---@return integer|nil lua_int Lua Integer
+function __mpz:try_to_lua_int()
     assert( self:__is_valid() )-- DEBUG
     local int = mpn.try_to_lua_int(self, 0, self.n)
     -- mpn.try_to_lua_int() returns math.mininteger,
@@ -382,14 +407,13 @@ function mpz:try_to_lua_int()
     end
     return int
 end
-__mpz.try_to_lua_int = mpz.try_to_lua_int
 
 -- returns a Lua integer from the natural integer
 -- If the natural integer does not fit into a Lua integer,
 -- raises a warning and returns math.maxinteger resp. math.mininteger
 -- Preconditons:
 --     self:__is_valid()
-function mpz:to_lua_int()
+function __mpz:to_lua_int()
     assert( self:__is_valid() )-- DEBUG
     local int = mpz.try_to_lua_int(self)
     if rawequal(int, nil) then
@@ -406,7 +430,6 @@ function mpz:to_lua_int()
     end
     return int
 end
-__mpz.to_lua_int = mpz.to_lua_int
 
 -- compares two integers
 -- if self <  other, return -1

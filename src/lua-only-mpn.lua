@@ -47,16 +47,17 @@ local mp_aux = require("lua-only-mp-aux")
 --
 -- A natural integer as an output argument, which consists of the limbs
 -- before the radix point (integer part), must always be specified by a pair
--- of the table to write in and a start index for the least significant limb 
--- (the limb directly after the radix point) to write. The function then 
--- returns the corresponding end index, which points directly before the most 
--- significant limb.
+-- of the table to write in and a start index for the least significant limb to write.
+-- (For an integer part the least significant limb is the limb directly before the radix point.)
+-- The function then returns the corresponding end index,
+-- which points directly before the most significant limb.
 --
 -- A natural "integer" as an output argument, which consists of the limbs
 -- after the radix point (fractional part), must be specified either by a 
--- triple as above or by a pair. In both cases the the table to write in and 
--- the end index, which points directly before the most significant limb (the 
--- limb directly after the radix point) to write must be specified.
+-- triple as above or by a pair. In both cases the table to write in and 
+-- the end index, which points directly before the most significant limb
+-- to write must be specified.
+-- (For a fractional part the most significant limb is the limb directly after the radix point.)
 -- In the case of a triple the difference between the end index and the start 
 -- index specifies the count of fractionals limbs to compute.
 -- In the case of a pair the function then returns the corresponding start 
@@ -116,6 +117,9 @@ local WIDTH, RADIX, MOD_MASK, SUB_MASK, TWO_WIDTH_MASK,
       DEBUG_STRING_LIMB_FORMAT_HEX_DIGITS_PER_LIMB,
       DIGITS_PER_LIMB_DEC, BIG_BASE_DEC
 
+--- @package
+--- @param width integer bits per limb
+--- @param purpose_str string description, why to set the value
 function mpn.__set_global_vars(width, purpose_str)
     -- BEGIN DEBUG
     if purpose_str ~= DEFAULT_PURPOSE_STR then
@@ -219,6 +223,7 @@ end
 function mpn.__set_limb_width(width, purpose_str)
     assert(type(purpose_str) == "string", "argument purpose_str"
                                         .." is not a string")
+    ---@type string
     local width_math_type = math.type(width)
     if width_math_type ~= "integer" then
         local width_type_str = type(width)
@@ -247,18 +252,44 @@ end
 mpn.__set_global_vars(MAX_WIDTH, DEFAULT_PURPOSE_STR)
 
 -- BEGIN DEBUG
+
+--- returns the count of bits currently used for a limb
+---@return integer limb_width count of bits per limb
 function mpn.limb_width()
     return WIDTH
 end
+
+--- returns the radix of the positional number system the limbs currently represent
+---@return integer limb_radix radix == 2^limb_width
 function mpn.limb_radix()
     return RADIX
 end
+
+--- returns the count of hexadecimal digits needed to denotate any limb
+---@return integer count_of_hex_digits_per_limb
 function mpn.get_count_of_hex_digits_per_limb()
     return DEBUG_STRING_LIMB_FORMAT_HEX_DIGITS_PER_LIMB
 end
 -- END DEBUG
 
-function mpn.__is_valid(t, i, e) --source
+--- @package
+--- 
+--- checks whether the range {`t`, `i`, `e`} is valid:
+--- - `t` must be a table.
+--- - The start index `i` must be an integer.
+--- - The end index `e` must be an integer.
+--- - The end index `e` must be equal or greater than the starting index `i`.
+--- - `t` must have an element at every index from including `i` to excluding `e`, which must be
+---   - an integer
+---   - non-negative
+---   - less than the limb radix
+---
+---@param t integer[] range array
+---@param i integer   range start index
+---@param e integer   source end index
+---
+---@return boolean ok whether all requirements are met
+function mpn.__is_valid(t, i, e)
     local ok = true
     local t_type = type(t)
     if not rawequal(t_type, "table") then
@@ -340,7 +371,15 @@ function mpn:__debug_string___limb_str_objs_comp(other)
     return self.k > other.k
 end
 
--- works also on invalid Integer
+--- works upto some degree also for invalid ranges
+--- 
+---@param t integer[] source array
+---@param i integer   source start index
+---@param e integer   source end index
+---@param prefix string some kind of prefix before the formatted limbs
+---@param format_func fun(limb: integer): string callback to format a limb
+---
+---@return string formatted_range
 function mpn.__debug_string(t, i, e, -- source
                             prefix, format_func)
     local str = "i="..mp_aux.sprint_value(i)
@@ -407,17 +446,17 @@ function mpn.debug_string_hex(t, i, e)
     return mpn.__debug_string(t, i, e, "hex", DEBUG_STRING_FORMAT_LIMB_HEX)
 end
 
--- constructor:
--- creates a new number from an integer
--- returns a new table with the limbs and its end index
--- The starting index is always 0.
-
--- splits a Lua integer into limbs
--- and writes these limbs into the provided table
--- from the provided starting index
--- returns the end index
-function mpn.split_lua_int(t, i, -- destination by start index
+--- converts a non-negative Lua Integer to a natural number
+---
+---@param t integer[] destination range array
+---@param i integer   destination range start index
+---@param int integer non-negative Lua integer
+---
+---@nodiscard
+---@return integer de destination end index
+function mpn.split_lua_int(t, i,
                            int)
+    
     assert( math.type(int) == "integer",
            "argument must be a Lua integer"
          .." (neither a float nor something other)")
@@ -432,10 +471,22 @@ function mpn.split_lua_int(t, i, -- destination by start index
     return e
 end
 
--- returns a Lua integer from the natural integer
--- 
--- If the natural integer does not fit into a Lua integer, returns nil.
-function mpn.try_to_lua_int(t, i, e) -- source
+--- tries to convert a range into a (non-negative) Lua integer
+--- The value of the range must less equal `math.maxinteger`
+--- 
+--- If the range is valid and its value is less equal `math.maxinteger`,
+--- then the return value is a non-negative integer.<br>
+--- If the range is valid and its value equals the absolute value of `math.mininteger`,
+--- the the return value is `math.mininteger`, which is negative.<br>
+--- Else the return value is `nil`
+--- 
+---@param t integer[] range array
+---@param i integer   range start index
+---@param e integer   range end index
+---
+---@nodiscard
+---@return integer|nil lua_int Lua Integer or nil if the value does not fit in a Lua integer.
+function mpn.try_to_lua_int(t, i, e)
     assert( mpn.__is_valid(t, i, e) )-- DEBUG
     
     if e <= i then
@@ -515,9 +566,16 @@ end
 -- if 1st/self <  2nd/other, returns -1
 -- if 1st/self == 2nd/other, returns  0 
 -- if 1st/self >  2nd/other, returns +1
--- Mnemonic: mpn_cmp() returns the sign of the directed difference of
+-- Mnemonic: mpn.cmp() returns the sign of the directed difference of
 --           the 1st range minus the 2nd range.
 -- in contrast to GNU MP's mpn_cmp() the arguments can have different lengths.
+---@param self_t integer[] "self" source range array
+---@param self_i integer   "self" source range start index
+---@param self_e integer   "self" source range end index
+---@param other_t integer[] "other" source range array
+---@param other_i integer   "other" source range start index
+---@param other_e integer   "other" source range end index
+---@return integer cmp_res sign of the directed difference "self" - "other"
 function mpn.cmp( self_t,  self_i,  self_e, -- 1st source range
                  other_t, other_i, other_e) -- 2nd source range
     assert( mpn.__is_valid( self_t,  self_i,  self_e) )-- DEBUG
@@ -1160,23 +1218,40 @@ function mpn.add(dt, di, -- destination by start index
     return di, carry
 end
 
--- subtracts the 2nd source range (subtrahend)
--- from the 1st source range (minuend)
--- and writes the result range (directed difference)
--- The 1st source range must be longer than the 2nd source range
--- or equally long.
--- The 1st return value is the destination's end index, which is di-se+si
--- The 2nd return value is the left outgoing borrow bit,
--- which is either 0 or 1.
--- If the natural integer represented by the 2nd source range is greater than 
--- those of the 1st source range, then the destination is given in the
--- RADIX-complement of the absolute difference (undirected difference). Then
--- and only then the borrow bit is 1.
--- The source ranges and the destination range must not overlap! (currently)
-function mpn.sub(dt, di, -- destination by start index
-                 st, si, se, -- subtrahend source "self"
-                 ot, oi, oe, -- minuend source "other"
-                 borrow) -- right outgoing borrow bit
+--- subtracts the 2nd source range (subtrahend)
+--- from the 1st source range (minuend)
+--- and writes the result range (directed difference)
+--- 
+--- The 1st source range must be longer than the 2nd source range
+--- or equally long.
+--- 
+--- If the natural integer represented by the 2nd source range is greater than 
+--- those of the 1st source range, then the destination is given in the
+--- RADIX-complement of the absolute difference (undirected difference). Then
+--- and only then the outgoing borrow bit is 1.
+--- 
+--- The source ranges and the destination range must not overlap! (currently)
+---
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---
+---@param st integer[] self subtrahend source range array
+---@param si integer   self subtrahend source range start index
+---@param se integer   self subtrahend source range end index
+---
+---@param ot integer[] other minuend range array
+---@param oi integer   other minuend range start index
+---@param oe integer   other minuend range end index
+---
+---@param borrow integer right incoming borrow bit
+---
+---@nodiscard
+---@return integer de destination range end index
+---@return integer outgoing_borrow left outgoing borrow bit
+function mpn.sub(dt, di,
+                 st, si, se,
+                 ot, oi, oe,
+                 borrow)
     -- BEGIN DEBUG
     assert( (se-si) >= (oe-oi),
             "The 1st source range is smaller than the 2nd source range." )
@@ -1227,16 +1302,26 @@ function mpn.sub(dt, di, -- destination by start index
 end
 
 -- computes the absolute difference (undirected difference) between two ranges
--- The 1st return value is the destination's end index, which is di-se+si
--- The 2nd return value is true if the directed difference of the 1st source 
--- range minus the 2nd source range is negative resp. if the 2nd source range 
--- is greater than the 1st source range. Else the 2nd return value is false.
 -- The source ranges and the destination range must not overlap! (currently)
-function mpn.difference(dt, di, -- destination by start index
-                        st, si, se, -- 1st source "self"
-                        ot, oi, oe) -- 2nd source "other"
-    local cmp_res = mpn.cmp(st, si, se, -- 1st source "self"
-                            ot, oi, oe) -- 2nd source "other"
+---
+---@param dt integer[] destination range
+---@param di integer   destination start index
+---@param st integer[] self source range
+---@param si integer   self source range start index
+---@param se integer   self source range end index
+---@param ot integer[] other source range
+---@param oi integer   other source range start index
+---@param oe integer   other source range end index
+---
+---@nodiscard
+---@return integer de destination end index == di - se + si
+---@return boolean is_negative whether 1st range - 2nd range is negative
+function mpn.difference(dt, di,
+                        st, si, se,
+                        ot, oi, oe)
+
+    local cmp_res = mpn.cmp(st, si, se, -- "self"  source range
+                            ot, oi, oe) -- "other" source range
     if cmp_res > 0 then -- self > other
         local de, borrow -- DEBUG
                          = mpn.sub(dt, di, -- destination

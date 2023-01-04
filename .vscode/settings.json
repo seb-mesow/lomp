@@ -1,6 +1,6 @@
 {
     "Lua.diagnostics.disable": [
-        "trailing-space"
+        "trailing-space",
     ],
     "lua.debug.settings.path": "${workspaceFolder}/test/?.lua;${workspaceFolder}/src/?.lua;${workspaceFolder}/?.lua",
     "luaTestAdapter.testGlob": "**/test/[tT]est_*.lua",
