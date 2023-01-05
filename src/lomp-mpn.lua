@@ -1,5 +1,5 @@
-local msg = require("lua-only-mp-msg")
-local mp_aux = require("lua-only-mp-aux")
+local msg = require("lomp-msg")
+local aux = require("lomp-aux")
 
 -- mpn is the INTERNAL module for the implementation of the actual
 -- arbitrary-precision arithmetic algorithms.
@@ -67,7 +67,7 @@ local mp_aux = require("lua-only-mp-aux")
 local f = string.format
 
 local function bin(int)
-    return "(bin) "..mp_aux.binary_from_int(int)
+    return "(bin) "..aux.binary_from_int(int)
 end
 -- END DEBUG
 
@@ -75,8 +75,8 @@ local mpn = {}
 
 -- declaration of module-wide global vars
 
-local HOST_WIDTH = mp_aux.host_width()
-local HOST_NON_NEG_WIDTH = mp_aux.host_non_neg_width()
+local HOST_WIDTH = aux.host_width()
+local HOST_NON_NEG_WIDTH = aux.host_non_neg_width()
 
 -- because 2^3 = 8 < 10 <= 2^4 = 16
 -- This useful for efficient radix conversion to decimal and hexadecimal. 
@@ -100,7 +100,7 @@ local MAX_WIDTH = HOST_NON_NEG_WIDTH >> 1
 
 -- BEGIN DEBUG
 local function hex(num)
-    return mp_aux.grouped_hex_from_int(
+    return aux.grouped_hex_from_int(
                 num, DEBUG_STRING_LIMB_FORMAT_HEX_DIGITS_PER_LIMB)
 end
 -- END DEBUG
@@ -118,14 +118,14 @@ local WIDTH, RADIX, MOD_MASK, SUB_MASK, TWO_WIDTH_MASK,
       DIGITS_PER_LIMB_DEC, BIG_BASE_DEC
 
 --- @package
---- @param width integer bits per limb
+--- @param width integer count of bits per limb
 --- @param purpose_str string description, why to set the value
 function mpn.__set_global_vars(width, purpose_str)
     -- BEGIN DEBUG
-    if purpose_str ~= DEFAULT_PURPOSE_STR then
-        msg.logf("Set the following values for global variables"
-               .." for the purpose: \"%s\"", purpose_str)
-    end
+    -- if purpose_str ~= DEFAULT_PURPOSE_STR then
+    --     msg.logf("Set the following values for global variables"
+    --            .." for the purpose: \"%s\"", purpose_str)
+    -- end
     -- END DEBUG
     
     WIDTH = width
@@ -189,32 +189,32 @@ function mpn.__set_global_vars(width, purpose_str)
     
     
     -- BEGIN DEBUG
-    if purpose_str ~= DEFAULT_PURPOSE_STR then
-        msg.logf("WIDTH == %d ; RADIX == 2^%d == %s == %d",
-                 WIDTH, WIDTH, hex(RADIX), RADIX)
-        msg.logf("MIN_WIDTH == %d ; MAX_WIDTH == %d", 
-                 MIN_WIDTH, MAX_WIDTH)
-        msg.logf("HOST_WIDTH = %d ; HOST_NON_NEG_WIDTH == %d", 
-                 HOST_WIDTH, HOST_NON_NEG_WIDTH)
-        
-        msg.logf("MOD_MASK == %s", hex(MOD_MASK))
-        msg.logf("SUB_MASK == %s", hex(SUB_MASK))
-        msg.logf("TWO_WIDTH_MASK == %s", hex(TWO_WIDTH_MASK))
-        
-        msg.logf("RADIX - 1 == 2^%d - 1 == %s == %d",
-                 WIDTH, hex(RADIX - 1), RADIX - 1)
-        
-        msg.logf("DEBUG_STRING_LIMB_FORMAT_OCT == %s",
-                 mp_aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_OCT))
-        msg.logf("DEBUG_STRING_LIMB_FORMAT_DEC == %s",
-                 mp_aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_DEC))
-        msg.logf("DEBUG_STRING_LIMB_FORMAT_HEX == %s",
-                 mp_aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_HEX))
-                 
-        msg.logf("DIGITS_PER_LIMB_DEC == %u", DIGITS_PER_LIMB_DEC)
-        msg.logf("BIG_BASE_DEC == %u == %s", BIG_BASE_DEC, hex(BIG_BASE_DEC))
-        msg.log("")-- newline
-    end
+    -- if purpose_str ~= DEFAULT_PURPOSE_STR then
+    --     msg.logf("WIDTH == %d ; RADIX == 2^%d == %s == %d",
+    --              WIDTH, WIDTH, hex(RADIX), RADIX)
+    --     msg.logf("MIN_WIDTH == %d ; MAX_WIDTH == %d", 
+    --              MIN_WIDTH, MAX_WIDTH)
+    --     msg.logf("HOST_WIDTH = %d ; HOST_NON_NEG_WIDTH == %d", 
+    --              HOST_WIDTH, HOST_NON_NEG_WIDTH)
+    --     
+    --     msg.logf("MOD_MASK == %s", hex(MOD_MASK))
+    --     msg.logf("SUB_MASK == %s", hex(SUB_MASK))
+    --     msg.logf("TWO_WIDTH_MASK == %s", hex(TWO_WIDTH_MASK))
+    --     
+    --     msg.logf("RADIX - 1 == 2^%d - 1 == %s == %d",
+    --              WIDTH, hex(RADIX - 1), RADIX - 1)
+    --     
+    --     msg.logf("DEBUG_STRING_LIMB_FORMAT_OCT == %s",
+    --              aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_OCT))
+    --     msg.logf("DEBUG_STRING_LIMB_FORMAT_DEC == %s",
+    --              aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_DEC))
+    --     msg.logf("DEBUG_STRING_LIMB_FORMAT_HEX == %s",
+    --              aux.sprint_value(DEBUG_STRING_LIMB_FORMAT_HEX))
+    --              
+    --     msg.logf("DIGITS_PER_LIMB_DEC == %u", DIGITS_PER_LIMB_DEC)
+    --     msg.logf("BIG_BASE_DEC == %u == %s", BIG_BASE_DEC, hex(BIG_BASE_DEC))
+    --     msg.log("")-- newline
+    -- end
     -- END DEBUG
 end
 
@@ -382,8 +382,8 @@ end
 ---@return string formatted_range
 function mpn.__debug_string(t, i, e, -- source
                             prefix, format_func)
-    local str = "i="..mp_aux.sprint_value(i)
-              .." e="..mp_aux.sprint_value(e)
+    local str = "i="..aux.sprint_value(i)
+              .." e="..aux.sprint_value(e)
     if e == i then
         return str.." =^= 0"
     elseif e < i then
@@ -398,7 +398,7 @@ function mpn.__debug_string(t, i, e, -- source
             if math.type(v) == "integer" then
                 temp_str = temp_str..format_func(v)
             else
-                temp_str = temp_str..mp_aux.sprint_value(v)
+                temp_str = temp_str..aux.sprint_value(v)
             end
             table.insert(limb_str_objs, { k = k ; s = temp_str })
         end
@@ -420,7 +420,7 @@ function mpn.__debug_string(t, i, e, -- source
 end
 
 local function DEBUG_STRING_FORMAT_LIMB_BIN(limb)
-    local str = mp_aux.binary_from_int(limb)
+    local str = aux.binary_from_int(limb)
     return string.rep("0", WIDTH-string.len(str))..str -- pad with zeros
 end
 local function DEBUG_STRING_FORMAT_LIMB_OCT(limb)
@@ -478,7 +478,7 @@ end
 --- If the range is valid and its value is less equal `math.maxinteger`,
 --- then the return value is a non-negative integer.<br>
 --- If the range is valid and its value equals the absolute value of `math.mininteger`,
---- the the return value is `math.mininteger`, which is negative.<br>
+--- then the return value is `math.mininteger`, which is negative.<br>
 --- Else the return value is `nil`
 --- 
 ---@param t integer[] range array
@@ -506,7 +506,7 @@ function mpn.try_to_lua_int(t, i, e)
         first_non_zero_limb = t[j]
     until first_non_zero_limb > 0
     
-    local free_bits = mp_aux.count_leading_zeros(
+    local free_bits = aux.count_leading_zeros(
                             first_non_zero_limb, HOST_WIDTH)
     
     -- abs(math.mininteger) distugish itself from other x,
@@ -1047,12 +1047,12 @@ function mpn.rshift_many_discard(
             "right shift amount must be an integer")
     assert( crop_shift > 0 , "right shift amount must be positive.")
     assert( mpn.__is_valid(t, i, e) )
-    msg.logf("source range == %s", mpn.debug_string_bin(t, i, e))
-    msg.logf("input crop_shift == %d", crop_shift)
+    -- msg.logf("source range == %s", mpn.debug_string_bin(t, i, e))
+    -- msg.logf("input crop_shift == %d", crop_shift)
     -- END DEBUG
     
     if e <= i then
-        return di, fe
+        return di
     end
     
     -- compute extra limbs and /necessary/ shift
@@ -1062,9 +1062,9 @@ function mpn.rshift_many_discard(
     local de = di + math.max(e-i - ft_limbs_trunc, 0)
     
     -- BEGIN DEBUG
-    msg.logf("working crop_shift == %d", crop_shift)
-    msg.logf("i_split == %d", i_split)
-    msg.logf("di == %d, de == %d", di, de)
+    -- msg.logf("working crop_shift == %d", crop_shift)
+    -- msg.logf("i_split == %d", i_split)
+    -- msg.logf("di == %d, de == %d", di, de)
     -- END DEBUG
     
     -- There is 1 phase:
@@ -1140,8 +1140,8 @@ function mpn.lshift_many_bounded(
             "left shift amount must be an integer")
     assert( make_room_shift > 0 , "left shift amount must be positive.")
     assert( mpn.__is_valid(t, i, e) )
-    msg.logf("source range == %s", mpn.debug_string_bin(t, i, e))
-    msg.logf("input make_room_shift == %d", make_room_shift)
+    -- msg.logf("source range == %s", mpn.debug_string_bin(t, i, e))
+    -- msg.logf("input make_room_shift == %d", make_room_shift)
     -- END DEBUG
     
     if e <= i then
@@ -1165,11 +1165,11 @@ function mpn.lshift_many_bounded(
     local i_split = math.max(e - complete_zero_limbs, i)
     
     -- BEGIN DEBUG
-    msg.logf("complete_zero_limbs == %d", complete_zero_limbs)
-    msg.logf("working make_room_shift == %d", make_room_shift)
-    msg.logf("i_split == %d", i_split)
-    msg.logf("ri == %d, re == %d", ii, re)
-    msg.logf("di == %d, de == %d", fi, de)
+    -- msg.logf("complete_zero_limbs == %d", complete_zero_limbs)
+    -- msg.logf("working make_room_shift == %d", make_room_shift)
+    -- msg.logf("i_split == %d", i_split)
+    -- msg.logf("ri == %d, re == %d", ii, re)
+    -- msg.logf("di == %d, de == %d", fi, de)
     -- END DEBUG
     
     local saved_di = fi -- DEBUG
@@ -1276,10 +1276,10 @@ function mpn.lshift_many_unbounded(
     return de
 end
 
---- adds two ranges
+--- adds two ranges, propagates a carry.
 --- 
---- The 1st source range (augend, "self")  must be longer than
---- the 2nd source range (addend, "other") or equally long.
+--- The length of the 1st source range (augend, "self") must be greater than or equal to
+--- the length of the 2nd source range (addend, "other").
 --- 
 --- The source ranges and the destination range must not overlap! (currently)
 --- 
@@ -1295,10 +1295,11 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination range end index
-function mpn.add(dt, di, -- destination by start index
-                 st, si, se, -- augend source "self"
-                 ot, oi, oe, -- addend source "other"
-                 carry) -- right incoming carry
+---@return integer carry left outgoing carry
+function mpn.add_bounded(dt, di, -- destination by start index
+                         st, si, se, -- augend source "self"
+                         ot, oi, oe, -- addend source "other"
+                         carry) -- right incoming carry
     -- BEGIN DEBUG
     assert( (se-si) >= (oe-oi),
             "The 1st source range is shorter than the 2nd source range." )
@@ -1325,7 +1326,9 @@ function mpn.add(dt, di, -- destination by start index
         temp = carry + st[si] + ot[oi]
         dt[di] = temp & MOD_MASK
         carry = temp >> WIDTH
-        di = di +1 ; si = si +1 ; oi = oi +1
+        di = di +1
+        si = si +1
+        oi = oi +1
     end
     -- extra digits of self, while carry is positive
     while (carry > 0) and (si < se) do
@@ -1334,26 +1337,59 @@ function mpn.add(dt, di, -- destination by start index
         temp = carry + st[si]
         dt[di] = temp & MOD_MASK
         carry = temp >> WIDTH
-        di = di +1 ; si = si + 1
+        di = di +1
+        si = si +1
     end
+    -- Here holds:
+    -- (carry == 0) or (si == se) -- Note normal or (not xor)
+    
     -- copy extra digits of self, because carry is 0
     -- and would also never again become 1
-    while si < se do
+    while si < se do -- If this loop is executed, because si < se,
+                     -- then must be carry == 0 .
         dt[di] = st[si]
-        di = di +1 ; si = si + 1
+        di = di +1
+        si = si +1
     end
-    -- if carry > 0 then
-    --     -- if here carry > 0, then the last loop before was never executed
-    --     -- possible "overflow" digit
-    --     dt[di] = carry
-    --     di = di +1
-    -- end
     
-    assert( (carry == 0) or (carry == 1) )-- DEBUG
     assert( (di-saved_di) == (si-saved_si) ) -- DEBUG
     assert( (di-saved_di) == (se-saved_si) ) -- DEBUG
     assert( mpn.__is_valid(dt, saved_di, di) )-- DEBUG
     return di, carry
+end
+
+--- adds two ranges, prepends a carry to the destination range
+--- 
+--- The length of the 1st source range (augend, "self") must be greater than or equal to
+--- the length of the 2nd source range (addend, "other").
+--- 
+--- The source ranges and the destination range must not overlap! (currently)
+--- 
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param st integer[] augend source range ("self")  array
+---@param si integer   augend source range ("self")  start index
+---@param se integer   augend source range ("self")  end   index
+---@param ot integer[] addend source range ("other") array
+---@param oi integer   addend source range ("other") start index
+---@param oe integer   addend source range ("other") end   index
+---@param carry integer right incoming carry
+---
+---@nodiscard
+---@return integer de destination range end index
+function mpn.add_unbounded(dt, di, -- destination by start index
+                           st, si, se, -- augend source "self"
+                           ot, oi, oe, -- addend source "other"
+                           carry) -- right incoming carry
+    local de, carry = mpn.add_bounded(dt, di,
+                                      st, si, se,
+                                      ot, oi, oe,
+                                      carry)
+    if carry > 0 then
+        dt[de] = carry
+        de = de +1
+    end
+    return de
 end
 
 --- subtracts one range from another (directed difference)
@@ -1449,7 +1485,7 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination end index == `di - se + si`
----@return boolean is_negative whether 1st range - 2nd range is negative
+---@return boolean is_negative whether the directed difference self range - other range is negative
 function mpn.diff(dt, di,
                   st, si, se,
                   ot, oi, oe)

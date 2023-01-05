@@ -284,7 +284,7 @@ function mpz.__new(int)
             self.n = mpn.split_lua_int(self, 0, -- destination
                                        int-1) -- == math.maxinteger
             -- TODO use mpn.add_1()
-            self.n = mpn.add(self, 0, -- destination
+            self.n = mpn.add_unbounded(self, 0, -- destination
                              self, 0, self.n, -- augend source
                              {}, 0, 0, -- addend source
                              1)-- right incoming carry)
@@ -308,12 +308,12 @@ end
 ---@return mpz abs_copy deep copy with the absolute value
 --- 
 --- Preconditons:
---- - `self:__is_valid_excl_sign()`
+--- - `self:__is_valid_ignore_sign()`
 ---
 --- Postconditons:
 --- - `abs_copy:__is_valid_excl_sign()`
 function mpz.__copy_abs(self)
-    assert( self:__is_valid_excl_sign() )-- DEBUG
+    assert( self:__is_valid_ignore_sign() )-- DEBUG
     local copy = setmetatable({
         n = self.n ;
     }, __mpz_meta)
@@ -471,14 +471,18 @@ function __mpz:try_to_lua_int()
         return
     end
     if int < 0 then
-        if not self.s then
-            -- implicitly return nil, because abs(math.mininteger) can not
-            -- be represented in a Lua integer
-            return -- implicitly return nil
+        -- Here we know, that self == -+ math.mininteger.
+        if self.s then
+            -- self == math.mininteger
+            return int
         end
+        -- implicitly return nil, because self == -math.mininteger can not
+        -- be represented in a Lua integer
+        return -- implicitly return nil
     elseif self.s then
         return -int
     end
+    return int
 end
 
 --- converts a `mpz` to a Lua integer
@@ -526,7 +530,7 @@ end
 --- Preconditions:
 --- - `self:__is_valid()`
 --- - `other:__is_valid()`
-function mpz:cmp(other)
+function mpz.cmp(self, other)
     self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     if self.s then
@@ -554,7 +558,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean is_less_or_equal whether the 1st operand is strictly less than the 2nd operand
-function mpz:less(other)
+function mpz.less(self, other)
     return mpz.cmp(self, other) == -1
 end
 
@@ -565,7 +569,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean is_less_or_equal whether the 1st operand is less than or equals the 2nd operand
-function mpz:less_equal(other)
+function mpz.less_equal(self, other)
     return mpz.cmp(self, other) ~= 1
 end
 
@@ -576,7 +580,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean are_equal whether both operands are equal
-function mpz:equal(other)
+function mpz.equal(self, other)
     return mpz.cmp(self, other) == 0
 end
 
@@ -587,7 +591,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean is_greater_or_equal whether the 1st operand is greater than or equals the 2nd operand
-function mpz:greater_equal(other)
+function mpz.greater_equal(self, other)
     return mpz.cmp(self, other) ~= -1
 end
 
@@ -598,7 +602,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean is_greater whether the 1st operand is strictly greater than the 2nd operand
-function mpz:greater(other)
+function mpz.greater(self, other)
     return mpz.cmp(self, other) == 1
 end
 
@@ -812,23 +816,16 @@ __mpz_meta.__shr = mpz.shr
 --- Postconditions:
 --- - `sum:__is_valid_excl_sign()`
 function mpz:__add_impl(other)
-    local res = setmetatable({}, __mpz_meta)
-    
+    local res = setmetatable({
+        s = self.s
+    }, __mpz_meta)
     if self.n < other.n then
         self, other = other, self
     end
-    local n, carry = mpn.add(res, 0, -- destination
-                             self, 0, self.n, -- augend
-                             other, 0, other.n, -- addend
-                             0) -- right incoming carry
-    if carry > 0 then
-        res[n] = 1
-        res.n = n +1
-    else
-        res.n = n
-    end
-    res.s = self.s
-    
+    res.n = mpn.add_unbounded(res, 0, -- destination
+                              self, 0, self.n, -- augend
+                              other, 0, other.n, -- addend
+                              0) -- right incoming carry
     assert( res:__is_valid() )-- DEBUG
     return res
 end
@@ -851,16 +848,15 @@ end
 --- - `diff:__is_valid()`
 function mpz:__sub_impl(other)
     local res = setmetatable({}, __mpz_meta)
-    
-    res.n, res.s = mpn.difference(res, 0, -- destination
-                                  self, 0, self.n, -- 1st source
-                                  other, 0, other.n, -- 2nd source
-                                  0) -- right incoming borrow
+    local n
+    n, res.s = mpn.diff(res, 0, -- destination
+                        self, 0, self.n, -- 1st source
+                        other, 0, other.n)-- 2nd source
     
     -- TODO avoid that an Integer must be minimal
     -- minimize result
-    local n = res.n -1
-    while n >= 0 and res[n] <= 0 do
+    n = n -1 -- calc last index
+    while (n >= 0) and (res[n] <= 0) do
         res[n] = nil
         n = n -1
     end
@@ -1077,7 +1073,7 @@ __mpz_meta.__idiv = mpz.div
 --- Postconditions:
 --- - `res:__is_valid()`
 --- - `res^2 <= self`
-function __mpz:sqrt()
+function mpz.sqrt(self)
     self = mpz.__ensure_is_mpz(self)
     
     if self.s then

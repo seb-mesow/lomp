@@ -23,20 +23,34 @@ local function __table_insert_unique(t, v)
     end
 end
 
--- A test tuple is { num = <Lua number> ; int = <Integer> }
+---@class test_tuple
+---@field num integer Lua integer
+---@field int mpz mpz
+
+---@type test_tuple[]
 local sorted_tuples = {}
 -- sorted by num increasing
 
--- A test pair is { self = <self test tuple> ; other = <other test tuple> }
+---@class test_pair
+---@field self  test_tuple 1st operand test tuple
+---@field other test_tuple 2nd operand test tuple
+
+---@type test_pair[]
 local sorted_pairs = {}
 -- 1. sorted by self.num increasing, 2. sorted by other.num increasing
 
--- takes a table of Lua integers, converts each in an mpz
--- and combines them to a tuple
--- then sorts the tuples by increasing value
--- and stores the tuples as a sequence in the tuples table (1sr. ret. val)
--- also forms the cartesian product of the set of tuples
--- and stores the pairs of tuples in the pairs table (2nd ret. val)
+--- takes a table of Lua integers, converts each in an mpz
+--- and combines them to a tuple
+--- then sorts the tuples by increasing value
+--- and stores the tuples as a sequence in the tuples table (1sr. ret. val)
+--- also forms the cartesian product of the set of tuples
+--- and stores the pairs of tuples in the pairs table (2nd ret. val)
+---
+---@param nums integer[]
+---
+---@nodiscard
+---@return test_tuple[] sorted_tuples
+---@return test_pair[] sorted_pairs
 function build_sorted_sequence(nums)
     for _, num in pairs(nums) do
         assert(type(num) == "number")
@@ -117,37 +131,45 @@ local function __build_sorted_sequence_and_test_new_and_test_try_to_lua_int()
     sorted_tuples, sorted_pairs = build_sorted_sequence(nums)
 end
 
--- unpacks a tuple and calls a function
--- with the number and Integer as arguments
+--- unpacks a tuple and calls a function
+--- with the number and Integer as arguments
+---
+---@param func fun(num: integer, int: mpz)
+---@param tuples? test_tuple[]
 function apply_on_tuples(func, tuples)
     if rawequal(tuples, nil) then
         tuples = sorted_tuples
     end
+    ---@cast tuples test_tuple[]
     for _, tuple in ipairs(tuples) do
-        BEGIN_TEST_DATA()
-        TEST_DATUM("num", tuple.num)
-        TEST_DATUM("int", tuple.int)
+        -- BEGIN_TEST_DATA()
+        -- TEST_DATUM("num", tuple.num)
+        -- TEST_DATUM("int", tuple.int)
         func(tuple.num, tuple.int)
-        END_TEST_DATA()
-        TEST_OP_NAME(nil)
+        -- END_TEST_DATA()
+        -- TEST_OP_NAME(nil)
     end
 end
 
--- unpacks a pair and calls a function
--- with the self tuple and the other tuple as arguments
+--- unpacks a pair and calls a function
+--- with the self tuple and the other tuple as arguments
+---
+---@param func fun(self: test_tuple, other: test_tuple)
+---@param pairs? test_pair[]
 function apply_on_pairs(func, pairs)
     if rawequal(pairs, nil) then
         pairs = sorted_pairs
     end
+    ---@cast pairs test_pair[]
     for _, pair in ipairs(pairs) do
-        BEGIN_TEST_DATA()
-        TEST_DATUM("self.num", pair.self.num)
-        TEST_DATUM("self.int", pair.self.int)
-        TEST_DATUM("other.num", pair.other.num)
-        TEST_DATUM("other.int", pair.other.int)
+        --BEGIN_TEST_DATA()
+        --TEST_DATUM("self.num", pair.self.num)
+        --TEST_DATUM("self.int", pair.self.int)
+        --TEST_DATUM("other.num", pair.other.num)
+        --TEST_DATUM("other.int", pair.other.int)
         func(pair.self, pair.other)
-        END_TEST_DATA()
-        TEST_OP_NAME(nil)
+        --END_TEST_DATA()
+        --TEST_OP_NAME(nil)
     end
 end
 
@@ -155,6 +177,8 @@ end
 
 function test_try_to_lua_int()
     -- only special tests of try_to_lua_int()
+    ---@param int mpz
+    ---@param exp_num integer|nil
     local function test_case(int, exp_num)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("mpz:try_to_lua_int()   (only special values)")
@@ -189,6 +213,8 @@ function test_try_to_lua_int()
 end
 
 function test_cmp()
+    ---@param self test_tuple
+    ---@param other test_tuple
     local function test_case(self, other)
         local exp_compare_result
         -- This convention of compare_result behaves
@@ -208,6 +234,10 @@ function test_cmp()
 end
 
 function test_comparision_operators()
+    ---@param self mpz|integer
+    ---@param relation_str string
+    ---@param other mpz|integer
+    ---@param exp_bool boolean
     local function ____test_case(self, relation_str, other, exp_bool)
         local func
         if relation_str == "<" then
@@ -225,20 +255,23 @@ function test_comparision_operators()
         assert_equals(res_bool, exp_bool)
     end
     
-    local function __test_case(self, compare_result, other)
-        if compare_result == 0 then-- self == other
+    ---@param self mpz|integer
+    ---@param exp_cmp_res integer
+    ---@param other mpz|integer
+    local function __test_case(self, exp_cmp_res, other)
+        if exp_cmp_res == 0 then -- self == other
             ____test_case(self, "<" , other, false)
             ____test_case(self, "<=", other, true )
             ____test_case(self, "==", other, true )
             ____test_case(self, ">=", other, true )
             ____test_case(self, ">" , other, false)
-        elseif compare_result == 1 then-- self > other
+        elseif exp_cmp_res == 1 then -- self > other
             ____test_case(self, "<" , other, false)
             ____test_case(self, "<=", other, false)
             ____test_case(self, "==", other, false)
             ____test_case(self, ">=", other, true )
             ____test_case(self, ">" , other, true )
-        else-- self < other
+        else -- self < other
             ____test_case(self, "<" , other, true )
             ____test_case(self, "<=", other, true )
             ____test_case(self, "==", other, false)
@@ -247,21 +280,23 @@ function test_comparision_operators()
         end
     end
     
+    ---@param self  test_tuple
+    ---@param other test_tuple
     local function test_case(self, other)
-        local compare_result
+        local exp_cmp_res
         -- This convention of compare_result behaves
         -- equal to those of GMP's mpz_cmp()
         if self.num < other.num then
-            compare_result = -1
+            exp_cmp_res = -1
         elseif self.num > other.num then
-            compare_result = 1
+            exp_cmp_res = 1
         else
-            compare_result = 0
+            exp_cmp_res = 0
         end
-        __test_case(self.num, compare_result, other.num)
-        __test_case(self.int, compare_result, other.num)
-        __test_case(self.num, compare_result, other.int)
-        __test_case(self.int, compare_result, other.int)
+        __test_case(self.num, exp_cmp_res, other.num)
+        __test_case(self.int, exp_cmp_res, other.num)
+        __test_case(self.num, exp_cmp_res, other.int)
+        __test_case(self.int, exp_cmp_res, other.int)
     end
     
     -- It is enough to test much fewer pairs,
@@ -275,6 +310,8 @@ function test_comparision_operators()
 end
 
 function test_copy()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("mpz:copy()")
@@ -292,6 +329,8 @@ function test_copy()
 end
 
 function test_abs()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("mpz:abs()")
@@ -301,12 +340,12 @@ function test_abs()
             assert( num == math.mininteger )
             local int_a = mpz.new(math.mininteger)
             -- BEGIN_TEST_OP()
-            local int_b = int_a:abs()
+            local int_b = mpz.abs(int_a)
             -- END_TEST_OP()
             assert_true( mpz.equal(int_b, -int_a) )
         else
             -- BEGIN_TEST_OP()
-            local res_int = int:abs()
+            local res_int = mpz.abs(int)
             -- END_TEST_OP()
             local res_num = res_int:to_lua_int()
             assert_equals(res_num, exp_num)
@@ -318,6 +357,8 @@ function test_abs()
 end
 
 function test_neg()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("unary negation operator")
@@ -344,7 +385,10 @@ function test_neg()
 end
 
 function test_shift()
-    local function test_case__lshift(num_arg, int, s)
+    ---@param num_arg integer
+    ---@param int mpz
+    ---@param left_shift_amount integer
+    local function test_case__lshift(num_arg, int, left_shift_amount)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("<< operator")
         -- BEGIN_TEST_DATA()
@@ -363,10 +407,10 @@ function test_shift()
             return
         end
         -- if abs(num_arg) has bits, that would be shifted out left
-        if (s > 0) and (num & (-1 << (HOST_WIDTH-s))) ~= 0 then
+        if (left_shift_amount > 0) and (num & (-1 << (HOST_WIDTH-left_shift_amount))) ~= 0 then
             exp_num = nil
         else
-            exp_num = num << s
+            exp_num = num << left_shift_amount
             if exp_num < 0 then
                 -- END_TEST_CASE()
                 -- END_TEST_DATA()
@@ -377,7 +421,7 @@ function test_shift()
             end
         end
         -- BEGIN_TEST_OP()
-        local res_int = int << s
+        local res_int = int << left_shift_amount
         -- END_TEST_OP()
         local res_num = res_int:try_to_lua_int()
         assert_equals(res_num, exp_num)
@@ -385,12 +429,15 @@ function test_shift()
         -- END_TEST_DATA()
     end
     
-    local function test_case__rshift(num_arg, int, s)
+    ---@param num_arg integer
+    ---@param int mpz
+    ---@param right_shift_amount integer
+    local function test_case__rshift(num_arg, int, right_shift_amount)
         --TEST_MSG_ON()
-        TEST_OP_NAME(">> operator")
-        BEGIN_TEST_DATA()
-        TEST_DATUM("s", s)
-        BEGIN_TEST_CASE()
+        -- TEST_OP_NAME(">> operator")
+        -- BEGIN_TEST_DATA()
+        -- TEST_DATUM("s", right_shift_amount)
+        -- BEGIN_TEST_CASE()
         local exp_num
         if num_arg < 0 then
             num = -num_arg
@@ -398,23 +445,29 @@ function test_shift()
             num = num_arg
         end
         -- We assume an infinite word width (to the left)
-        if num < 0 then END_TEST_CASE() ; END_TEST_DATA() ; return end
+        if num < 0 then
+            -- END_TEST_CASE() ; END_TEST_DATA()
+            return
+        end
         -- if abs(num_arg) has bits, that would be shifted out left
-        if (s < 0) and (num & (-1 << (HOST_WIDTH+s))) ~= 0 then
+        if (right_shift_amount < 0) and (num & (-1 << (HOST_WIDTH+right_shift_amount))) ~= 0 then
             exp_num = nil
         else
-            exp_num = num >> s
-            if exp_num < 0 then END_TEST_CASE() ; END_TEST_DATA() ; return end
+            exp_num = num >> right_shift_amount
+            if exp_num < 0 then
+                -- END_TEST_CASE() ; END_TEST_DATA()
+                return
+            end
             if num_arg < 0 then
                 exp_num = -exp_num
             end
         end
-        BEGIN_TEST_OP()
-        local res_int = int >> s
-        END_TEST_OP()
+        -- BEGIN_TEST_OP()
+        local res_int = int >> right_shift_amount
+        -- END_TEST_OP()
         local res_num = res_int:try_to_lua_int()
         assert_equals(res_num, exp_num)
-        END_TEST_CASE() ; END_TEST_DATA()
+        -- END_TEST_CASE() ; END_TEST_DATA()
     end
     
     local shift_step = (WIDTH >> 1) -1
@@ -422,25 +475,30 @@ function test_shift()
         shift_step = 1
     end
     
+    ---@param num integer
+    ---@param int mpz
     local function test_cases(num, int)
-        local s = 0
+        local shift_amount = 0
         repeat
-            test_case__lshift(num, int,  s)
-            test_case__lshift(num, int, -s)
-            test_case__rshift(num, int,  s)
-            test_case__rshift(num, int, -s)
-            s = s + shift_step
-        until s > HOST_WIDTH
+            test_case__lshift(num, int,  shift_amount)
+            test_case__lshift(num, int, -shift_amount)
+            test_case__rshift(num, int,  shift_amount)
+            test_case__rshift(num, int, -shift_amount)
+            shift_amount = shift_amount + shift_step
+        until shift_amount > HOST_WIDTH
     end
     
     apply_on_tuples(test_cases)
 end
 
 function test_add_sub()
+    ---@param self  test_tuple
+    ---@param other test_tuple
     local function test_case(self, other)
         --TEST_MSG_ON()
         -- TEST_OP_NAME("+ operator")
         -- BEGIN_TEST_CASE()
+        ---@type integer|nil
         local exp_num = self.num + other.num
         if ((self.num < 0) == (other.num < 0)) -- detect wrapping around
         and ((exp_num < 0) ~= (self.num < 0)) then
@@ -455,7 +513,9 @@ function test_add_sub()
     apply_on_pairs(test_case)
 end
 
-function test_multiply()
+function DISABLED_test_mul()
+    ---@param self  test_tuple
+    ---@param other test_tuple
     local function test_case(self, other)
         local self_num_abs = math.abs(self.num)
         local other_num_abs = math.abs(other.num)
@@ -465,7 +525,7 @@ function test_multiply()
             -- ignore wrapping around
             if ( (self.num < 0) == (other.num < 0) ) == (exp_num >= 0) then
                 local res_int = self.int * other.int
-                local res_num = res_int:to_lua_integer()
+                local res_num = res_int:to_lua_int()
                 assert_equals(res_num, exp_num)
             end
         end
@@ -480,7 +540,9 @@ function test_multiply()
           dummy = -maxinteger_int * -maxinteger_int
 end
 
-function test_divide()
+function DISABLED_test_div()
+    ---@param self  test_tuple
+    ---@param other test_tuple
     local function test_case(self, other)
         if other.num == 0 then
             lu.assert_error_msg_contains(
@@ -494,7 +556,7 @@ function test_divide()
                 exp_num = exp_num +1
             end
             local res_int = self.int // other.int
-            local res_num = res_int:to_lua_integer()
+            local res_num = res_int:to_lua_int()
             lu.assert_equals(res_num, exp_num)
         end
     end
@@ -508,7 +570,9 @@ function test_divide()
           dummy = -maxinteger_int * -maxinteger_int
 end
 
-function test_sqrt()
+function DISABLED_test_sqrt()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         logf("----- test_sqrt(%s) ----------------------------------------", dec(num))
         if num < 0 then
@@ -526,7 +590,9 @@ function test_sqrt()
     apply_on_tuples(test_case)
 end
 
-function test_dec()
+function DISABLED_test_dec()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         local exp_str = string.format("%d", num)
         local res_str = int:dec()
@@ -536,7 +602,9 @@ function test_dec()
     apply_on_tuples(test_case)
 end
 
-function test_hex()
+function DISABLED_test_hex()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         local exp_str = ""
         if num < 0 then
@@ -551,7 +619,9 @@ function test_hex()
     apply_on_tuples(test_case)
 end
 
-function test_hex_lowercase()
+function DISABLED_test_hex_lowercase()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         local exp_str = ""
         if num < 0 then
@@ -566,7 +636,9 @@ function test_hex_lowercase()
     apply_on_tuples(test_case)
 end
 
-function test_oct()
+function DISABLED_test_oct()
+    ---@param num integer
+    ---@param int mpz
     local function test_case(num, int)
         local exp_str = ""
         if num < 0 then
@@ -584,14 +656,8 @@ end
 
 __build_sorted_sequence_and_test_new_and_test_try_to_lua_int()
 
-os.exit( lu.LuaUnit.run(
-    -- "-p", "test_"
-     "-p", "to_lua_int"
-    ,"-p", "cmp"
-    ,"-p", "comparision_operators"
-    ,"-p", "copy"
-    ,"-p", "abs"
-    ,"-p", "neg"
-    ,"-p", "shift"
-    -- ,"-p", "add_sub"
-))
+os.exit( lu.LuaUnit.run())
+-- Never add any arguments to luaunit,
+-- if it is expected, that the VS Code Lua Test Extensions,
+-- correctly parse the test results.
+-- Instead prefix the name of the test with "DISABLED__" .

@@ -7,9 +7,9 @@
 
 package.path = "./test/?.lua;./src/?.lua;"..package.path
 
-local mp_aux = require("lua-only-mp-aux")
-local msg = require("lua-only-mp-msg")
-local mpn = require("lua-only-mpn")
+local mp_aux = require("lomp-aux")
+local msg = require("lomp-msg")
+local mpn = require("lomp-mpn")
 
 lu = require("luaunit-patched")
 
@@ -99,7 +99,7 @@ end
 
 
 
-
+if false then
 local __TEST_MSG_INFOS = {}
 
 __TEST_MSG_INFOS.backup_test_datum_objs = {}
@@ -194,6 +194,7 @@ function END_TEST_CASE()
         __TEST_MSG_INFOS.on = false
     end
 end
+end -- end if false
 
 local function __get_msg()
     return __sprint_test_data()
@@ -203,10 +204,13 @@ end
     
 -- like lu.assert_equals() but prints an auto-generated informative message 
 -- about the test data, of the test case when the test case failed. 
-function assert_equals(res, exp)
-    lu.assert_equals(res, exp, __get_msg)
-end
+-- function assert_equals(res, exp)
+--     lu.assert_equals(res, exp, __get_msg)
+-- end
+-- 
+-- function assert_true(bool)
+--     lu.assert_true(bool, __get_msg)
+-- end
 
-function assert_true(bool)
-    lu.assert_true(bool, __get_msg)
-end
+assert_equals = lu.assert_equals
+assert_true = lu.assert_true
