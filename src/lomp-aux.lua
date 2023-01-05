@@ -16,15 +16,30 @@ end
 -- Thus it is ok, that their values are captured (copied) as upvalues,
 -- by the following function definitions
 
+--- get the width of Lua integers in the host
+---
+---@return integer host_width width of Lua integers
 function mp_aux.host_width()
     return HOST_WIDTH
 end
+
+--- get the width of non-negative Lua integers in the host
+---
+---@return integer host_non_neg_width width of non-negative Lua integers
 function mp_aux.host_non_neg_width() 
     return HOST_NON_NEG_WIDTH
 end
 
--- returns the count of leading zeros,
--- when x is considered as a word with width_arg bits.
+--- compute the count of leading zeros
+--- 
+--- returns 0 for negative integer `x`
+--- because they are represented with the twos-complement.
+--- 
+---@param x integer integer as a word of width `width_arg`
+---@param width_arg integer fixed width of the word `x`
+---
+---@nodiscard
+---@return integer clz count of leading zeros of the word `x`
 function mp_aux.count_leading_zeros(x, width_arg)
     assert( math.type(x) == "integer" , "argument must be an integer." )
     assert( math.type(width_arg) == "integer" , "width must be an integer")
@@ -35,7 +50,7 @@ function mp_aux.count_leading_zeros(x, width_arg)
     if x < 0 then
         return 0
     end
-    assert( (x >> width_arg) == 0, "argument must be less than 2^width" )
+    assert( (x >> width_arg) == 0, "argument must be less than 2^width_arg" )
     -- We perform a binary search
     -- The algorithm is ROUGHLY:
     -- 1. initialize the number of leading zeros with WIDTH
@@ -66,8 +81,16 @@ function mp_aux.count_leading_zeros(x, width_arg)
     return clz - x
 end
 
--- returns true, if the given non-negative integer is a power of two
--- Note that 0 is NOT a power of two
+--- test whether an integer is a power of two
+--- 
+--- Note that 0 is NOT a power of two.
+--- 
+--- returns false for negative operands
+---
+---@param x integer integer to test
+---
+---@nodiscard
+---@return boolean is_a_power_of_two whether `x` is a power of two
 function mp_aux.is_power_of_two(x)
     assert( math.type(x) == "integer", "argument is not an integer")
     return (x > 0) and rawequal(x & (x-1), 0)

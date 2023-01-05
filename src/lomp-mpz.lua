@@ -1,9 +1,9 @@
 ---@diagnostic disable: invisible
 
-local msg = require("lua-only-mp-msg")
-local mp_aux = require("lua-only-mp-aux")
+local msg = require("lomp-msg")
+local mp_aux = require("lomp-aux")
 
-local mpn = require("lua-only-mpn")
+local mpn = require("lomp-mpn")
 
 -- ########## Integer class ##########
 
@@ -669,7 +669,7 @@ __mpz_meta.__unm = mpz.neg
 ---
 ---@param self mpz operand to shift left
 ---@param res table table to store the result in (must already be declared as `mpz`)
----@param s integer bit positions to shift left (must be positive)
+---@param s integer count of bit positions to shift left by (must be positive)
 ---
 --- Preconditons:
 --- - `s > 0`
@@ -697,15 +697,15 @@ end
 ---
 ---@param self mpz operand to shift right
 ---@param res table table to store the result in (must already be declared as `mpz`)
----@param s integer bit positions to shift left (must be positive)
+---@param right_shift_amount integer count of bit positions to shift right by (must be positive)
 ---
 --- Preconditons:
 --- - `s > 0`
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function mpz.__rshift(self, res, s)
-    assert( s > 0 )-- DEBUG
+function mpz.__rshift(self, res, right_shift_amount)
+    assert( right_shift_amount > 0 )-- DEBUG
     -- local n = mpn.rshift_many_bounded(
     --         res, 0, -- destination for the integer part of the shifted copy
     --         {}, 0, -- destination for the fractional part of the shifted copy
@@ -714,7 +714,7 @@ function mpz.__rshift(self, res, s)
     local n = mpn.rshift_many_discard(
             res, 0, -- destination for the integer part of the shifted copy
             self, 0, self.n, -- source
-            s) -- right shift amount
+            right_shift_amount) -- right shift amount
     local nm1 = n -1
     if rawequal(res[nm1], 0) then
         res[nm1] = nil 
@@ -729,26 +729,26 @@ end
 --- 
 --- Actually shifts to the right if the shift amount is negative.
 ---
----@param self mpz operand to shift
----@param s integer count of bit positions to shift to the left
+---@param self mpz operand to shift left
+---@param left_shift_amount integer count of bit positions to shift left by
 ---
 ---@nodiscard
 ---@return mpz res
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function mpz.shl(self, s)
-    assert( math.type(s) == "integer", "shift amount must be an integer.")
+function mpz.shl(self, left_shift_amount)
+    assert( math.type(left_shift_amount) == "integer", "left shift amount is not an integer.")
     assert( self:__is_valid() , "self")-- DEBUG
-    if (self.n < 1) or (s == 0) then
+    if (self.n < 1) or (left_shift_amount == 0) then
         return mpz.copy(self)
     end
     local res = setmetatable({}, __mpz_meta)
-    if s > 0 then
-        mpz.__lshift(self, res, s)
+    if left_shift_amount > 0 then
+        mpz.__lshift(self, res, left_shift_amount)
         res.s = self.s
     else
-        mpz.__rshift(self, res, -s)
+        mpz.__rshift(self, res, -left_shift_amount)
         if res.n < 1 then
             res.s = false
         else
@@ -764,8 +764,8 @@ __mpz_meta.__shl = mpz.shl
 --- 
 --- Actually shifts to the left if the shift amount is negative.
 ---
----@param self mpz operand to shift
----@param s integer count of bit positions to shift to the right
+---@param self mpz operand to shift right
+---@param s integer count of bit positions to shift right by
 ---
 ---@nodiscard
 ---@return mpz res
@@ -797,7 +797,7 @@ __mpz_meta.__shr = mpz.shr
 
 --- implementation of addition
 --- 
---- The sign of the returned `sum` equals the sign of the parameter `self`.
+--- The sign of the returned `sum` equals the sign of the 1st summand `self`.
 ---
 ---@param self  mpz 1st summand
 ---@param other mpz 2nd summand

@@ -446,11 +446,11 @@ function mpn.debug_string_hex(t, i, e)
     return mpn.__debug_string(t, i, e, "hex", DEBUG_STRING_FORMAT_LIMB_HEX)
 end
 
---- converts a non-negative Lua Integer to a natural number
+--- converts a non-negative Lua Integer to a range
 ---
 ---@param t integer[] destination range array
 ---@param i integer   destination range start index
----@param int integer non-negative Lua integer
+---@param int integer non-negative Lua integer to convert from
 ---
 ---@nodiscard
 ---@return integer de destination end index
@@ -472,6 +472,7 @@ function mpn.split_lua_int(t, i,
 end
 
 --- tries to convert a range into a (non-negative) Lua integer
+--- 
 --- The value of the range must less equal `math.maxinteger`
 --- 
 --- If the range is valid and its value is less equal `math.maxinteger`,
@@ -485,7 +486,7 @@ end
 ---@param e integer   range end index
 ---
 ---@nodiscard
----@return integer|nil lua_int Lua Integer or nil if the value does not fit in a Lua integer.
+---@return integer|nil opt_int Lua integer or nil if the value does not fit in a Lua integer.
 function mpn.try_to_lua_int(t, i, e)
     assert( mpn.__is_valid(t, i, e) )-- DEBUG
     
@@ -546,9 +547,17 @@ function mpn.try_to_lua_int(t, i, e)
     return int
 end
 
--- copies a sequence of limbs from one table to another table
--- The natural integer can be zero.
--- returns the destination end index (for convenience)
+--- copies a range to another
+---
+--- The source range can be zero
+---
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---
+---@return integer de destination end index (for convenience)
 function mpn.copy(dt, di, -- destination by start index
                   t, i, e) -- source
     assert( mpn.__is_valid(t, i, e) )-- DEBUG
@@ -561,57 +570,62 @@ function mpn.copy(dt, di, -- destination by start index
     return di + e-i
 end
 
--- compares two natural integers
--- The return values follow the convention of GNU MP's mpn_cmp()
--- if 1st/self <  2nd/other, returns -1
--- if 1st/self == 2nd/other, returns  0 
--- if 1st/self >  2nd/other, returns +1
--- Mnemonic: mpn.cmp() returns the sign of the directed difference of
---           the 1st range minus the 2nd range.
--- in contrast to GNU MP's mpn_cmp() the arguments can have different lengths.
----@param self_t integer[] "self" source range array
----@param self_i integer   "self" source range start index
----@param self_e integer   "self" source range end index
----@param other_t integer[] "other" source range array
----@param other_i integer   "other" source range start index
----@param other_e integer   "other" source range end index
----@return integer cmp_res sign of the directed difference "self" - "other"
-function mpn.cmp( self_t,  self_i,  self_e, -- 1st source range
-                 other_t, other_i, other_e) -- 2nd source range
-    assert( mpn.__is_valid( self_t,  self_i,  self_e) )-- DEBUG
-    assert( mpn.__is_valid(other_t, other_i, other_e) )-- DEBUG
+--- compares two ranges
+---
+--- The return values follow the convention of GNU MP's `mpn_cmp()`:<br>
+--- if self <  other, returns -1<br>
+--- if self == other, returns  0<br>
+--- if self >  other, returns +1<br>
+--- Mnemonic: `mpn.cmp()` returns the sign of the directed difference of
+---           the 1st range minus the 2nd range.
+--- in contrast to GNU MP's `mpn_cmp()` the arguments can have different lengths.
+---
+---@param st integer[] self  source range array
+---@param si integer   self  source range start index
+---@param se integer   self  source range end   index
+---@param ot integer[] other source range array
+---@param oi integer   other source range start index
+---@param oe integer   other source range end   index
+---
+---@nodiscard
+---@return integer cmp_res sign of the directed difference self - other
+function mpn.cmp(st, si, se, -- 1st source range
+                 ot, oi, oe) -- 2nd source range
     
-    local  self_l =  self_e- self_i
-    local other_l = other_e-other_i
-    local common_l = math.min(self_l, other_l)
+    assert( mpn.__is_valid( st,  si,  se) )-- DEBUG
+    assert( mpn.__is_valid(ot, oi, oe) )-- DEBUG
+    
+    local sl = se- si
+    local ol = oe-oi
+    local common_l = math.min(sl, ol)
     -- search for first non-zero limb in the more significant limbs of the 
     -- longer range, which are additional with respect to the smaller range
-    if self_l > other_l then
+    if sl > ol then
         -- e == 5, common_l == 3, i == 0 --> lower_end_index = 3
-        local lower_end_index = self_i+common_l
-        while self_e > lower_end_index do
-            self_e = self_e -1
-            if not rawequal(self_t[self_e], 0) then
+        local lower_end_index = si+common_l
+        while se > lower_end_index do
+            se = se -1
+            if not rawequal(st[se], 0) then
                 return 1
             end
         end
     else
-        local lower_end_index = other_i+common_l
-        while other_e > lower_end_index do
-            other_e = other_e -1
-            if not rawequal(other_t[other_e], 0) then
+        local lower_end_index = oi+common_l
+        while oe > lower_end_index do
+            oe = oe -1
+            if not rawequal(ot[oe], 0) then
                 return -1
             end
         end
     end
-    assert(  self_e >=  self_i+common_l )-- DEBUG
-    assert( other_e >= other_i+common_l )-- DEBUG
+    assert(  se >=  si+common_l )-- DEBUG
+    assert( oe >= oi+common_l )-- DEBUG
     -- determinate the first limb smaller or greater
     local self_limb, other_limb
-    while self_e > self_i do
-        self_e = self_e -1 ; other_e = other_e -1
-        self_limb = self_t[self_e]
-        other_limb = other_t[other_e]
+    while se > si do
+        se = se -1 ; oe = oe -1
+        self_limb = st[se]
+        other_limb = ot[oe]
         if self_limb < other_limb then
             return -1
         elseif self_limb > other_limb then
@@ -621,20 +635,31 @@ function mpn.cmp( self_t,  self_i,  self_e, -- 1st source range
     return 0
 end
 
--- shifts a natural integer right by a certain count of binary digits
--- The right shift amount must be less than the limb width ("few")
--- writes the shifted copy to the destination
--- returns the end index of the destination natural integer (for convenience)
--- and a remainder.
--- The remainder are shifted out bits from the least significant end
--- The source and destination must not overlap! (currently)
+--- shifts range right by a certain count of bit positions
+---
+--- The destination range is truncated at the destination start index ("bounded").
+--- Thus bits from the lower significant end are discarded from the destination,
+--- but returned.
+---
+--- The right shift amount must be less than the limb width ("few").
+--- 
+--- The source and destination must not overlap! (currently)
+---
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end  index
+---@param crop_shift integer count of bit postitions to shift the source range right by
+---@param left_incoming_bits integer bits to shift into the more significant end of the destination range
+---
+---@return integer de destination end index (for convenience)
+---@return integer right_outgoing_bits bits shifted out of the lower significant end of the destination range
 function mpn.rshift_few_bounded(
         dt, di, -- destination by start index
         t, i, e, -- source
         crop_shift, -- right shift amount
-        left_incoming_bits -- bits, that replace the away shifted bits
-                           -- at the most significand end of dt
-    )
+        left_incoming_bits)
     -- BEGIN DEBUG
     assert( math.type(crop_shift) == "integer" ,
             "right shift amount must be an integer")
@@ -679,23 +704,34 @@ function mpn.rshift_few_bounded(
     return de, left_incoming_bits & MOD_MASK
 end
 
--- -- shifts a natural integer right by a certain count of binary digits
--- -- The right shift amount must be less than the limb width ("few")
--- -- writes the shifted copy to the destination
--- -- The return value is the start index of the shifted copy
--- -- The copy can be have one limb more than the argument ("unbounded").
--- -- The source and destination must not overlap! (currently)
+--- shifts a range right by a certain count of bit positions
+---
+--- All bits from the source range are written to the destination range.
+--- Thus the destination range can be have one limb more than the source range ("unbounded").
+--- Thus no bits from the lower significant end are discarded.
+---
+--- The right shift amount must be less than the limb width ("few")
+--- 
+--- The source and destination must not overlap! (currently)
+---
+---@param dt integer[] destination range array
+---@param de integer   destination range **end** index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param right_shift_amount integer count of bit positions to shift the source range right by
+---@param left_incoming_bits integer bits to shift into the more significant end of the destination range
+---
+---@return integer di destination **start** index
 function mpn.rshift_few_unbounded(
         dt, de, -- destination by end index
         t, i, e, -- source
-        s, -- right shift amount
-        left_incoming_bits -- bits, that replace the away shifted bits
-                            -- at the most significant end of dt == de-1
-    )
+        right_shift_amount, -- right shift amount
+        left_incoming_bits)
     -- BEGIN DEBUG
-    assert( math.type(s) == "integer","left shift amount must be an integer")
-    assert( s > 0 , "right shift amount must be positive.")
-    assert( s < WIDTH , "right shift amount must be less than WIDTH.")
+    assert( math.type(right_shift_amount) == "integer","left shift amount must be an integer")
+    assert( right_shift_amount > 0 , "right shift amount must be positive.")
+    assert( right_shift_amount < WIDTH , "right shift amount must be less than WIDTH.")
     assert( mpn.__is_valid(t, i, e) )
     -- END DEBUG
     
@@ -703,14 +739,14 @@ function mpn.rshift_few_unbounded(
     local _de, rem_bits = mpn.rshift_few_bounded(
                                 dt, di, -- destination by start index
                                 t, i, e, -- source
-                                s, -- right shift amount
+                                right_shift_amount, -- right shift amount
                                 left_incoming_bits)
     -- BEGIN DEBUG
     assert( _de == de , f("s == %d"
                         .."\nsource range == %s"
                         .."\nresult range == %s"
                         .."\n_de == %d ~= de == %d",
-                          s,
+                          right_shift_amount,
                           mpn.debug_string_hex(t, i, e),
                           mpn.debug_string_hex(dt, di, _de),
                           _de, de) )
@@ -721,20 +757,31 @@ function mpn.rshift_few_unbounded(
     return di
 end
 
--- shifts a natural integer left by a certain count of binary digits
--- The left shift amount must be less than the limb width ("few")
--- writes the shifted copy to the destination
--- returns the end index of the destination natural integer (for convenience)
--- and a remainder.
--- The remainder is the shifted out bits from the most significant end.
--- The source and destination must not overlap! (currently)
+--- shifts range left by a certain count of bit positions
+---
+--- The destination range is truncated to the length of the source range ("bounded").
+--- Thus bits from the more significant end are discarded from the destination,
+--- but returned.
+---
+--- The left shift amount must be less than the limb width ("few").
+--- 
+--- The source and destination must not overlap! (currently)
+---
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end  index
+---@param make_room_shift integer count of bit positions to shift the source range left by
+---@param right_incoming_bits integer bits to shift into the lower significant end of the destination range
+---
+---@return integer de destination end index (for convenience)
+---@return integer left_outgoing_bits bits shifted out of the more significant end of the destination range
 function mpn.lshift_few_bounded(
         dt, di, -- destination
         t, i, e, -- source
         make_room_shift, -- left shift amount
-        right_incoming_bits -- bits, that replace the away shifted bits
-                            -- at the least significant end of dt
-    )
+        right_incoming_bits)
     -- BEGIN DEBUG
     assert( math.type(make_room_shift) == "integer" ,
             "left shift amount must be an integer")
@@ -767,30 +814,42 @@ function mpn.lshift_few_bounded(
     return di, right_incoming_bits
 end
 
--- shifts a natural integer left by a certain count of binary digits
--- The left shift amount must be less than the limb width ("few")
--- writes the shifted copy to the destination
--- The return value is the end index of the shifted copy
--- The copy can be have one limb more than the argument ("unbounded").
--- The source and destination must not overlap! (currently)
+--- shifts a range left by a certain count of bit positions
+---
+--- All bits from the source range are written to the destination range.
+--- Thus the destination range can be have one limb more than the source range ("unbounded").
+--- Thus no bits from the more significant end of the destination range are discarded.
+---
+--- The left shift amount must be less than the limb width ("few").
+--- 
+--- The source and destination must not overlap! (currently)
+---
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param left_shift_amount integer count of bit positions to shift the source range left by
+---@param right_incoming_bits integer bits to shift into the lower significant end of the destination range
+---
+---@nodiscard
+---@return integer de destination end index
 function mpn.lshift_few_unbounded(
         dt, di, -- destination
         t, i, e, -- source
-        s, -- left shift amount
-        right_incoming_bits -- bits, that replace the away shifted bits
-                            -- at the least significand end of dt
-    )
+        left_shift_amount, -- left shift amount
+        right_incoming_bits)
     -- BEGIN DEBUG
-    assert( math.type(s) == "integer","left shift amount must be an integer")
-    assert( s > 0 , "left shift amount must be positive.")
-    assert( s < WIDTH , "left shift amount must be less than WIDTH.")
+    assert( math.type(left_shift_amount) == "integer","left shift amount must be an integer")
+    assert( left_shift_amount > 0 , "left shift amount must be positive.")
+    assert( left_shift_amount < WIDTH , "left shift amount must be less than WIDTH.")
     assert( mpn.__is_valid(t, i, e) )
     -- END DEBUG
     
     local de, rem_bits = mpn.lshift_few_bounded(
                                 dt, di, -- destination by start index
                                 t, i, e, -- source
-                                s, -- left shift amount
+                                left_shift_amount, -- left shift amount
                                 right_incoming_bits)
     dt[de] = rem_bits
     de = de + 1
@@ -798,12 +857,26 @@ function mpn.lshift_few_unbounded(
     return de
 end
 
--- shifts a natural integer right by a certain count of binary digits
--- writes the more significant part of the shifted copy to the 1st destination
--- The 1st return value is the end index of that part
--- writes the less significant part of the shifted copy to the 2nd destination
--- The 2nd return value is the start index of that part
--- The source and destinations must not overlap! (currently)
+--- shifts a range right by a certain count of bit positions
+--- 
+--- Bits, that would be shifted out from the lower significant end of the source range
+--- are written to the "fractional" destination range.<br>
+--- Bits, that would remain in the source range are written to the "integer" destination range.
+--- 
+--- The source and destination range must not overlap! (currently)
+--- 
+---@param dt integer[] integer    destination range array
+---@param di integer   integer    destination range start index
+---@param ft integer[] fractional destination range array
+---@param fe integer   fractional destination range **end** index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param crop_shift integer count of bit positions to shift the source range right by
+---
+---@nodiscard
+---@return integer de integer    destination range   end     index
+---@return integer fi fractional destination range **start** index
 function mpn.rshift_many_bounded(
         dt, di, -- destination for the integer part of the shifted copy
         ft, fe, -- destination for the fractional part of the shifted copy
@@ -943,16 +1016,27 @@ function mpn.rshift_many_bounded(
     return de, fi
 end
 
--- There is mpn.rshift_many_unbounded() function planned currently,
+-- There is no mpn.rshift_many_unbounded() function planned currently,
 -- because that would mean, that it writes right of the provided start index. 
 -- Or other: The function would must return a start index (= start index of the 
 -- fractional part) and an end index (= end index of the integer part)
 
--- shifts a natural integer right by a certain count of binary digits
--- writes the more significant part of the shifted copy to the destination
--- The eturn value is the end index of that part
--- The less significant part of the shifted copy is discarded.
--- The source and destinations must not overlap! (currently)
+--- shifts a range right by a certain count of bit positions
+--- 
+--- Bits, that would be shifted out from the lower significant end of the source range
+--- are discarded.
+---
+--- The source and destination range must not overlap! (currently)
+--- 
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param crop_shift integer count of bit positions to shift the source range right by
+---
+---@nodiscard
+---@return integer de destination range end index
 function mpn.rshift_many_discard(
         dt, di, -- destination by start index
         t, i, e, -- source
@@ -1020,13 +1104,37 @@ end
 -- The 2nd return value is the end index of that part (for convenience)
 -- writes the additional part of the shifted copy to the 1st destination
 -- The 1st return value is the end index of that additional part
--- The source and destinations must not overlap! (currently)
+-- The source and destination range must not overlap! (currently)
+
+---@deprecated
+--- shifts a range left by a certain count of bit positions
+--- 
+--- Bits, that would be shifted out from the more significant end of the source range
+--- are written to the "integer" destination range.<br>
+--- Bits, that would remain in the source range are written to the "fractional" destination range.
+--- 
+--- The source and destination range must not overlap! (currently)
+--- 
+--- **TODO** get         fractional destination range end   index (instead of start index)<br>
+--- **TODO** thus return fractional destination range start index (instead of end   index)
+---
+---@param it integer[] integer    destination range array
+---@param ii integer   integer    destination range start index
+---@param ft integer[] fractional destination range array
+---@param fi integer   fractional destination range **start** index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param make_room_shift integer count of bit positions to shift the source range left by
+---
+---@nodiscard
+---@return integer de integer    destination range   end     index
+---@return integer fe fractional destination range **end** index
 function mpn.lshift_many_bounded(
-        rt, ri, -- destination by start index for shifted out limbs/bits
-        dt, di, -- destination by start index with length equal to source
+        it, ii, -- destination by start index for shifted out limbs/bits
+        ft, fi, -- destination by start index with length equal to source
         t, i, e, -- source
-        make_room_shift -- left shift amount
-    )
+        make_room_shift)
     -- BEGIN DEBUG
     assert( math.type(make_room_shift) == "integer",
             "left shift amount must be an integer")
@@ -1037,15 +1145,15 @@ function mpn.lshift_many_bounded(
     -- END DEBUG
     
     if e <= i then
-        return ri, di
+        return ii, fi
     end
     
     -- compute extra limbs and /necessary/ shift
     local complete_zero_limbs = make_room_shift // WIDTH
     make_room_shift = make_room_shift - complete_zero_limbs*WIDTH
     
-    local de = di + e-i
-    local re = ri + complete_zero_limbs
+    local de = fi + e-i
+    local re = ii + complete_zero_limbs
     if make_room_shift > 0 then
         re = re +1
     end
@@ -1060,47 +1168,47 @@ function mpn.lshift_many_bounded(
     msg.logf("complete_zero_limbs == %d", complete_zero_limbs)
     msg.logf("working make_room_shift == %d", make_room_shift)
     msg.logf("i_split == %d", i_split)
-    msg.logf("ri == %d, re == %d", ri, re)
-    msg.logf("di == %d, de == %d", di, de)
+    msg.logf("ri == %d, re == %d", ii, re)
+    msg.logf("di == %d, de == %d", fi, de)
     -- END DEBUG
     
-    local saved_di = di -- DEBUG
-    local saved_ri = ri -- DEBUG
+    local saved_di = fi -- DEBUG
+    local saved_ri = ii -- DEBUG
     local right_incoming_bits = 0
     
     -- There 4 phases:
     -- 1. pad zero limbs at dt from di upwards
     local complete_zero_limbs_j = 0
-    while (di < de) and (complete_zero_limbs_j < complete_zero_limbs) do
-        dt[di] = 0 ; di = di +1
+    while (fi < de) and (complete_zero_limbs_j < complete_zero_limbs) do
+        ft[fi] = 0 ; fi = fi +1
         complete_zero_limbs_j = complete_zero_limbs_j +1 
     end
     -- 2. (homogen or heterogen) filled limbs for dt upto excluding de
-    if di < de then
+    if fi < de then
         if make_room_shift > 0 then
             local _de -- DEBUG
             _de, right_incoming_bits =
-                    mpn.lshift_few_bounded(dt, di, -- destination by start index
+                    mpn.lshift_few_bounded(ft, fi, -- destination by start index
                                            t, i, i_split, -- source
                                            make_room_shift, -- left shift amount
                                            0) -- right incoming bits
             assert( _de == de )-- DEBUG
         else
             assert( de == -- DEBUG
-            mpn.copy(dt, di, --destination
+            mpn.copy(ft, fi, --destination
                      t, i, i_split) -- source
             )-- DEBUG
         end
     end
     -- 3. pad zero limbs at rt from ri upwards
     while complete_zero_limbs_j < complete_zero_limbs do
-        rt[ri] = 0 ; ri = ri +1
+        it[ii] = 0 ; ii = ii +1
         complete_zero_limbs_j = complete_zero_limbs_j +1 
     end
     -- 4. (homogen or heterogen) filled limbs for rt upto excluding re
     if make_room_shift > 0 then
         local _re = -- DEBUG
-        mpn.lshift_few_unbounded(rt, ri, -- destination by start index
+        mpn.lshift_few_unbounded(it, ii, -- destination by start index
                                  t, i_split, e, -- source
                                  make_room_shift, -- left shift amount
                                  right_incoming_bits)
@@ -1109,20 +1217,36 @@ function mpn.lshift_many_bounded(
         -- END DEBUG
     else
         assert( re == -- DEBUG
-        mpn.copy(rt, ri, -- destination by start index
+        mpn.copy(it, ii, -- destination by start index
                  t, i_split, e) -- source
         )-- DEBUG
     end
     
-    assert( mpn.__is_valid(rt, saved_ri, re) )-- DEBUG
-    assert( mpn.__is_valid(dt, saved_di, de) )-- DEBUG
+    assert( mpn.__is_valid(it, saved_ri, re) )-- DEBUG
+    assert( mpn.__is_valid(ft, saved_di, de) )-- DEBUG
     return re, de
 end
 
 -- shifts a natural integer left by a certain count of binary digits
 -- and writes a shifted copy to the destination
 -- The return value is the end index of the shifted copy
--- The source and destinations must not overlap! (currently)
+-- The source and destination range must not overlap! (currently)
+
+--- shifts a range left by a certain count of bit postitions
+--- 
+--- All bits from the source range are written to the destination range.
+--- Thus the destination range can be have more limbs than the source range ("unbounded").
+--- Thus no bits from the more significant end are discarded.
+--- 
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end index
+---@param make_room_shift integer count of bit positions to shift the source range left by
+---
+---@nodiscard
+---@return integer de destination range end index
 function mpn.lshift_many_unbounded(
         dt, di, -- destination by start index
         t, i, e, -- source
@@ -1152,11 +1276,25 @@ function mpn.lshift_many_unbounded(
     return de
 end
 
--- adds two ranges and writes the result range
--- The 1st source range must be longer than the 2nd source range
--- or equally long.
--- returns the end index, which is either di+se-si or di+se-si+1 .
--- The source ranges and the destination range must not overlap! (currently)
+--- adds two ranges
+--- 
+--- The 1st source range (augend, "self")  must be longer than
+--- the 2nd source range (addend, "other") or equally long.
+--- 
+--- The source ranges and the destination range must not overlap! (currently)
+--- 
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
+---@param st integer[] augend source range ("self")  array
+---@param si integer   augend source range ("self")  start index
+---@param se integer   augend source range ("self")  end   index
+---@param ot integer[] addend source range ("other") array
+---@param oi integer   addend source range ("other") start index
+---@param oe integer   addend source range ("other") end   index
+---@param carry integer right incoming carry
+---
+---@nodiscard
+---@return integer de destination range end index
 function mpn.add(dt, di, -- destination by start index
                  st, si, se, -- augend source "self"
                  ot, oi, oe, -- addend source "other"
@@ -1218,31 +1356,26 @@ function mpn.add(dt, di, -- destination by start index
     return di, carry
 end
 
---- subtracts the 2nd source range (subtrahend)
---- from the 1st source range (minuend)
---- and writes the result range (directed difference)
+--- subtracts one range from another (directed difference)
 --- 
---- The 1st source range must be longer than the 2nd source range
---- or equally long.
+--- The 1st source range (subtrahend, "self") must be longer than
+--- the 2nd source range (minuend, "other") or equally long.
 --- 
---- If the natural integer represented by the 2nd source range is greater than 
---- those of the 1st source range, then the destination is given in the
---- RADIX-complement of the absolute difference (undirected difference). Then
---- and only then the outgoing borrow bit is 1.
+--- If the natural integer represented by the 1nd source range is less than 
+--- those of the 2nd source range, then the destination is given in the
+--- `RADIX`-complement of the absolute difference (undirected difference).
+--- Then and only then the outgoing borrow bit is 1.
 --- 
 --- The source ranges and the destination range must not overlap! (currently)
 ---
 ---@param dt integer[] destination range array
 ---@param di integer   destination range start index
----
----@param st integer[] self subtrahend source range array
----@param si integer   self subtrahend source range start index
----@param se integer   self subtrahend source range end index
----
----@param ot integer[] other minuend range array
----@param oi integer   other minuend range start index
----@param oe integer   other minuend range end index
----
+---@param st integer[] subtrahend source range ("self") array
+---@param si integer   subtrahend source range ("self") start index
+---@param se integer   subtrahend source range ("self") end index
+---@param ot integer[] minuend range ("other") array
+---@param oi integer   minuend range ("other") start index
+---@param oe integer   minuend range ("other") end index
 ---@param borrow integer right incoming borrow bit
 ---
 ---@nodiscard
@@ -1301,8 +1434,9 @@ function mpn.sub(dt, di,
     return di, borrow
 end
 
--- computes the absolute difference (undirected difference) between two ranges
--- The source ranges and the destination range must not overlap! (currently)
+--- computes the absolute difference (undirected difference) between two ranges
+---
+--- The source ranges and the destination range must not overlap! (currently)
 ---
 ---@param dt integer[] destination range
 ---@param di integer   destination start index
@@ -1314,11 +1448,11 @@ end
 ---@param oe integer   other source range end index
 ---
 ---@nodiscard
----@return integer de destination end index == di - se + si
+---@return integer de destination end index == `di - se + si`
 ---@return boolean is_negative whether 1st range - 2nd range is negative
-function mpn.difference(dt, di,
-                        st, si, se,
-                        ot, oi, oe)
+function mpn.diff(dt, di,
+                  st, si, se,
+                  ot, oi, oe)
 
     local cmp_res = mpn.cmp(st, si, se, -- "self"  source range
                             ot, oi, oe) -- "other" source range
