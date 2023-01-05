@@ -153,8 +153,8 @@ function __mpz:__is_valid_ignore_sign()
     
     -- check each field, especially alls fields with integer keys
     for k,v in pairs(self) do
-        type_k = type(k)
-        type_v = type(v)
+        local type_k = type(k)
+        local type_v = type(v)
         if ( type_k == "string" ) then
             -- check string field
             if k ~= "n" and k ~= "s" then
@@ -272,7 +272,7 @@ end
 --- 
 --- Postconditions:
 --- - `new_mpz:__is_valid()`
-function mpz.__new_impl(int)
+function mpz.__new(int)
     local self = setmetatable({}, __mpz_meta)
     if int < 0 then
         self.s = true
@@ -296,28 +296,13 @@ function mpz.__new_impl(int)
     end
     self.n = mpn.split_lua_int(self, 0, -- destination
                                int)
-    assert(self:__is_valid())-- DEBUG
+    assert( self:__is_valid() )-- DEBUG
     return self
 end
 
----constructs a `mpz` from a Lua Integer
----
----@param int integer Lua integer
----
----@nodiscard
----@return mpz new_mpz constructed `mpz` object
----
---- Postconditions:
---- - `new_mpz:__is_valid()`
-function mpz.new(int)
-    if math.type(int) == "integer" then
-        return mpz.__new_impl(int)
-    end
-    msg.error("argument must be an integer"
-            .." (neither a float nor something other)")
-end
-
 --- deep copies the absolute value
+---
+---@param self mpz
 ---
 ---@nodiscard
 ---@return mpz abs_copy deep copy with the absolute value
@@ -326,8 +311,9 @@ end
 --- - `self:__is_valid_excl_sign()`
 ---
 --- Postconditons:
---- - `copy:__is_valid_excl_sign()`
-function __mpz:__copy_abs()
+--- - `abs_copy:__is_valid_excl_sign()`
+function mpz.__copy_abs(self)
+    assert( self:__is_valid_excl_sign() )-- DEBUG
     local copy = setmetatable({
         n = self.n ;
     }, __mpz_meta)
@@ -336,8 +322,67 @@ function __mpz:__copy_abs()
         -- a for loop with limit self.n -1 is still faster than a while loop.
         copy[i] = self[i]
     end
-    assert(copy:__is_valid_excl_sign())-- DEBUG
+    assert( copy:__is_valid_excl_sign() )-- DEBUG
     return copy
+end
+
+--- deep copies a `mpz`
+---
+---@param self mpz
+---
+---@nodiscard
+---@return mpz copy deep copy
+--- 
+--- Preconditons:
+--- - `self:__is_valid()`
+---
+--- Postconditons:
+--- - `copy:__is_valid()`
+function mpz.__copy(self)
+    assert( self:__is_valid() )-- DEBUG
+    local copy = mpz.__copy_abs(self)
+    copy.s = self.s
+    assert( copy:__is_valid() )-- DEBUG
+    return copy
+end
+
+--- deep copies a `mpz` or constructs a new `mpz` from a Lua Integer
+---
+---@param mpz_or_lua_int mpz|integer other `mpz` or Lua integer
+---
+---@nodiscard
+---@return mpz copy copied or newly constructed `mpz`
+---
+--- Postconditions:
+--- - `copy:__is_valid()`
+function mpz.copy(mpz_or_lua_int)
+    if getmetatable(mpz_or_lua_int) == __mpz_meta then
+        ---@cast mpz_or_lua_int mpz
+        return mpz.__copy(mpz_or_lua_int)
+    end
+    ---@cast mpz_or_lua_int integer
+    return mpz.__new(mpz_or_lua_int)
+end
+mpz.new = mpz.copy
+
+--- returns a `mpz` with the same value as its argument
+---
+---@param mpz_or_int mpz|integer operand
+---
+---@return mpz op_mpz operand as `mpz`
+--- 
+--- Preconditons:
+--- - if `mpz_or_int` is of type `mpz`, then `mpz_or_int:__is_valid()`
+--- 
+--- Postconditions:
+--- - `op_mpz:__is_valid()`
+function mpz.__ensure_is_mpz(mpz_or_int)
+    if getmetatable(mpz_or_int) == __mpz_meta then
+        ---@cast mpz_or_int mpz
+        return mpz_or_int -- do not deep copy, just pass reference
+    end
+    ---@cast mpz_or_int integer
+    return mpz.__new(mpz_or_int)
 end
 
 -- Constants
@@ -364,27 +409,6 @@ end
 ---@return mpz abs_one `mpz` with **no sign** and the absolute value 1
 function mpz.ABS_ONE()
     return setmetatable({ n = 1 ; [0] = 1 }, __mpz_meta)
-end
-
-
---- returns a `mpz` with the same value as its argument
----
----@param obj mpz|integer operand
----
----@return mpz obj_mpz operand as `mpz`
---- 
---- Preconditons:
---- - if `obj` is of type `mpz`, then `obj:__is_valid()`
---- 
---- Postconditions:
---- - `obj_mpz:__is_valid()`
-function mpz.__ensure_is_mpz(obj)
-    if getmetatable(obj) == __mpz_meta then
-        ---@cast obj mpz
-        return obj
-    end
-    ---@cast obj integer
-    return mpz.new(obj)
 end
 
 -- for debugging
@@ -428,16 +452,14 @@ __mpz_meta.__tostring = mpz.debug_string -- conversion to string with tostring()
 
 
 
---- tries to convert a Lua integer into a mpz<
+--- tries to convert a Lua integer into a mpz
 ---
---- If the mpz does not fit into a Lua integer, returns nil.
----
----@param self mpz
+--- If the `mpz` does not fit into a Lua integer, returns `nil`.
 ---
 ---@nodiscard
----@return integer|nil lua_int Lua Integer
+---@return integer|nil opt_int Lua Integer or `nil`
 --- 
---- Preconditons:<br>
+--- Preconditons:
 --- - `self:__is_valid()`
 function __mpz:try_to_lua_int()
     assert( self:__is_valid() )-- DEBUG
@@ -445,18 +467,18 @@ function __mpz:try_to_lua_int()
     -- mpn.try_to_lua_int() returns math.mininteger,
     -- if the range == abs(math.mininteger) ;
     -- thus if abs(self) == abs(math.mininteger) .
-    if not rawequal(int, nil) then
-        if int < 0 then
-            if not self.s then
-                -- implicitly return nil, because abs(math.mininteger) can not
-                -- be represented in a Lua integer
-                return -- implicitly return nil
-            end
-        elseif self.s then
-            return -int
-        end
+    if rawequal(int, nil) then
+        return
     end
-    return int
+    if int < 0 then
+        if not self.s then
+            -- implicitly return nil, because abs(math.mininteger) can not
+            -- be represented in a Lua integer
+            return -- implicitly return nil
+        end
+    elseif self.s then
+        return -int
+    end
 end
 
 --- converts a `mpz` to a Lua integer
@@ -464,8 +486,9 @@ end
 --- If the `mpz` does not fit into a Lua integer,
 --- raises a warning and returns `math.maxinteger` resp. `math.mininteger`
 --- according to the sign of the `mpz`
---- 
----@return integer lua_int Lua_integer
+---
+---@nodiscard
+---@return integer int Lua_integer
 --- 
 --- Preconditons:
 --- - `self:__is_valid()`
@@ -601,13 +624,15 @@ end
 
 --- computes the absolute value
 ---
+--- @param self mpz|integer
+---
 ---@nodiscard
 ---@return mpz abs_copy the absolute value of `self`
 ---
 --- Postconditions:
 --- - `abs_copy:__is_valid()`
-function __mpz:abs()
-    assert( self:__is_valid() , "self")-- DEBUG
+function mpz.abs(self)
+    self = mpz.__ensure_is_mpz(self)
     local copy = setmetatable({ s = false }, __mpz_meta)
     copy.n = mpn.copy(copy, 0, -- destination
                       self, 0, self.n) -- source
@@ -617,15 +642,15 @@ end
 
 --- unary negation operator
 --- 
----@param self mpz
+---@param self mpz|integer
 ---
 ---@nodiscard
 ---@return mpz neg_copy the negative of `self`
 --- 
 --- Postconditions:
 --- - `neg_copy:__is_valid()`
-function __mpz_meta:__unm()
-    assert( self:__is_valid() , "self")-- DEBUG
+function mpz.neg(self)
+    self = mpz.__ensure_is_mpz(self)
     local copy = setmetatable({}, __mpz_meta)
     copy.n = mpn.copy(copy, 0, -- destination
                       self, 0, self.n) -- source
@@ -637,6 +662,7 @@ function __mpz_meta:__unm()
     assert( copy:__is_valid() , "copy")-- DEBUG
     return copy
 end
+__mpz_meta.__unm = mpz.neg
 
 --- shift strictly to the left
 --- This may add limbs at the most significant end.
@@ -650,7 +676,7 @@ end
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function mpz:__lshift(res, s)
+function mpz.__lshift(self, res, s)
     assert( s > 0 )-- DEBUG
     local n = mpn.lshift_many_unbounded(res, 0, -- destination
                                         self, 0, self.n, -- source
@@ -678,7 +704,7 @@ end
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function mpz:__rshift(res, s)
+function mpz.__rshift(self, res, s)
     assert( s > 0 )-- DEBUG
     -- local n = mpn.rshift_many_bounded(
     --         res, 0, -- destination for the integer part of the shifted copy
@@ -711,7 +737,7 @@ end
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function __mpz_meta:__shl(s)
+function mpz.shl(self, s)
     assert( math.type(s) == "integer", "shift amount must be an integer.")
     assert( self:__is_valid() , "self")-- DEBUG
     if (self.n < 1) or (s == 0) then
@@ -732,6 +758,7 @@ function __mpz_meta:__shl(s)
     assert( res:__is_valid() , "res")-- DEBUG
     return res
 end
+__mpz_meta.__shl = mpz.shl
 
 --- right shifting operator `>>`
 --- 
@@ -745,7 +772,7 @@ end
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function __mpz_meta:__shr(s)
+function mpz.shr(self, s)
     assert( math.type(s) == "integer", "shift amount must be an integer.")
     assert( self:__is_valid() , "self")-- DEBUG
     if (self.n < 1) or (s == 0) then
@@ -766,7 +793,7 @@ function __mpz_meta:__shr(s)
     assert( res:__is_valid() , "res")-- DEBUG
     return res
 end
-
+__mpz_meta.__shr = mpz.shr
 
 --- implementation of addition
 --- 
@@ -853,7 +880,7 @@ end
 --- 
 --- Postconditions:
 --- - `sum:__is_valid()`
-function __mpz_meta:__add(other)
+function mpz.add(self, other)
     self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     
@@ -875,6 +902,7 @@ function __mpz_meta:__add(other)
     -- ( +s + -o == s - o with s >= 0 and o >= 1 )
     return mpz.__sub_impl(self, other)
 end
+__mpz_meta.__add = mpz.add
 
 --- subtraction operator `-`
 ---
@@ -886,7 +914,7 @@ end
 --- 
 --- Postconditions:
 --- - `diff:__is_valid()`
-function __mpz_meta:__sub(other)
+function mpz.sub(self, other)
     self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     
@@ -908,6 +936,7 @@ function __mpz_meta:__sub(other)
     -- ( +s - +o == s - o with s >= 0 and o >= 0 )
     return mpz.__sub_impl(self, other)
 end
+__mpz_meta.__sub = mpz.sub
 
 --- multiplication operator `*`
 ---
@@ -919,7 +948,7 @@ end
 ---
 --- Postconditions:
 --- - `res:__is_valid()`
-function __mpz_meta:__mul(other)
+function mpz.mul(self, other)
     self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     
@@ -944,6 +973,7 @@ function __mpz_meta:__mul(other)
     assert(res:__is_valid_sign())-- DEBUG
     return res
 end
+__mpz_meta.__mul = mpz.mul
 
 ---@deprecated
 --- divides the absolute values |self| / |other|
@@ -1006,7 +1036,7 @@ end
 ---
 --- Postconditions:
 --- - `quot:__is_valid()`
-function __mpz_meta:__idiv(other)
+function mpz.div(self, other)
     self = mpz.__ensure_is_mpz(self)
     other = mpz.__ensure_is_mpz(other)
     
@@ -1027,6 +1057,7 @@ function __mpz_meta:__idiv(other)
     
     return res
 end
+__mpz_meta.__idiv = mpz.div
 
 --- integer square root
 ---
