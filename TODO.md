@@ -49,7 +49,7 @@ some items
 - [ ] adapt automated test workflow
     - [ ] should work on push to any branch
     - [ ] rewrite writing to and loading env vars from cache as a bash script
-        - [ ] `git update-index chmod +x <script name>` or the like
+        - [ ] `git update-index --chmod=+x <script name>` or the like
 - [ ] increment/decrement (`++` `--`)
     - [ ] pre/post increment/decrement
 - [ ] bitwise operators (`&` `|` `~` `XOR` `<==>` `==>`)
