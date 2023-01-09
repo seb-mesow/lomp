@@ -1,0 +1,94 @@
+name: Automated Tests
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events, but only for the "main" branch
+  push:
+     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+
+env:
+  LOMP_WORKFLOW_LUA_VERSION: 5.3.5
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  automated-unit-tests: # This workflow contains a single job called "automated-unit-tests".
+    name: Automated Unit Tests
+    runs-on: ubuntu-latest # The type of runner that the job will run on
+    steps: # Steps represent a sequence of tasks that will be executed as part of the job
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v3 # Checks-out your repository under $GITHUB_WORKSPACE,
+                                  # so your job can access it
+      
+      - name: Try restore Lua and LuaRocks from cache
+        id: cache-lua-and-luarocks # referenced in if conditions
+        uses: actions/cache@v3
+        with:
+          key: ${{ runner.os }}-${{ runner.arch }}-lua-${{ env.LOMP_WORKFLOW_LUA_VERSION }}-and-luarocks
+          path: | # ljmf00/setup-lua@v1.0.0 installs Lua and LuaRocks there; refers to current directory
+            .lua
+            .luarocks
+            .cache-lua-and-luarocks_setup-env-vars.txt
+      
+      - if: steps.cache-lua-and-luarocks.outputs.cache-hit != 'true'
+        name: "Cache miss: Install Lua and LuaRocks"
+        uses: ljmf00/setup-lua@v1.0.0
+        with:
+          lua-version: ${{ env.LOMP_WORKFLOW_LUA_VERSION }} # version of Lua to setup
+                                                            # optional, default is 5.3.5
+          install-luarocks: true # optional: whether to install luarocks or not
+                                   # default is false
+          # luarocks-version: # optional: version of LuaRocks to setup
+                              # default is 3.8.0
+          # platform: # optional: the target platform (e.g. -A Win32 | x64)
+      
+      - if: steps.cache-lua-and-luarocks.outputs.cache-hit != 'true'
+        name: "Cache miss: Save environment variables for cache"
+        run: |
+          for env_var_name in \
+            PATH \
+            LUA_PATH \
+            LUA_PATH_5_3 \
+            LUA_PATH_5_4 \
+            LUA_CPATH \
+            LUA_CPATH_5_3 \
+            LUA_CPATH_5_4
+          do
+            if declare -p "$env_var_name" &> /dev/null ; then
+              declare -n env_var="$env_var_name"
+              echo "${env_var_name}=${env_var}"
+            fi
+          done > .cache-lua-and-luarocks_setup-env-vars.txt
+      
+      - if: steps.cache-lua-and-luarocks.outputs.cache-hit == 'true'
+        name: "Cache hit: Load environment variables from cache"
+        run: |
+          cat .cache-lua-and-luarocks_setup-env-vars.txt
+          cat .cache-lua-and-luarocks_setup-env-vars.txt >> "$GITHUB_ENV"
+      
+      - if: steps.cache-lua-and-luarocks.outputs.cache-hit != 'true'
+        name: "Cache miss: Install rocks for testing"
+        run: |
+          luarocks install luafilesystem
+          luarocks install luaunit
+      
+      # - name: Obtain infos about runner environment
+      #   run: |
+      #     echo "===== current directory =========="
+      #     pwd
+      #     echo "===== environment variables =========="
+      #     env | sort
+      #     echo "===== files in current directory =========="
+      #     find -print | sort
+          
+      # - name: Test Lua
+      #   run: lua -v
+      
+      # - name: Test LuaRocks
+      #   run: luarocks --version
+      
+      - name: Run all unit tests
+        run: ./test/run_all_unit_tests.bash

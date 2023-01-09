@@ -17,13 +17,28 @@ You will need to install the following extentions:
 - Lua Test Adapter by Linus Sunde
 These extensions are configured by the ``.json files`` in the ``.vscode`` directory.
 
-### Tests
+## Code Formatting
+
+All code is **formatted manually**. Please turn off any code formatting/pretty-printing/refactoring features.
+
+## Unit Tests
 
 <!-- As of Januar 2022 the maintainer recommends to not use Visual Studio Code's native Testing UI.
 Instead the Test Explorer UI provided by the extension Test Explorer UI from Holger Benl
 should be used. This is because the extension Lua Test Adapter still uses the Test Explorer UI.
 The conversion to the native Test API seems to not work satisfying. -->
 
-## Code Formatting
+To execute the unit tests you must have
+- a Bash shell available[^1]
+- installed Lua >= 5.3
+- installed LuaRocks
+- installed luafilesystem via luarocks
+- installed luaunit via luarocks
 
-All code is **formatted manually**. Please turn off any code formatting/pretty-printing/refactoring features.
+Then run **from the repository root**:
+```bash
+$ ./test/run_all_unit_tests.bash
+```
+
+[^1] scripts for powershell are maybe implemented in the future, but that is not a priority.
+     Feel free to write one.

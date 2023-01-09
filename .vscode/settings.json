@@ -13,4 +13,7 @@
     "Lua.format.enable": false,
     "Lua.runtime.version": "Lua 5.3",
     "lua.debug.settings.luaVersion": "5.3",
+    "yaml.validate": true,
+    "yaml.format.enable": false,
+    "editor.trimAutoWhitespace": false,
 }

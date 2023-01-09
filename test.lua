@@ -11,7 +11,7 @@ local mp_aux = require("lomp-aux")
 local msg = require("lomp-msg")
 local mpn = require("lomp-mpn")
 
-lu = require("luaunit-patched")
+lu = require("luaunit")
 
 -- set WIDTH == 15 for (simulating) 32-bit systems
 -- set WIDTH == 31 for              64-bit systems
