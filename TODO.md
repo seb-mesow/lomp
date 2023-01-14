@@ -8,13 +8,12 @@ only a few items
 - [x] continous integration (automated testing)
 - [ ] multiplication
 - [ ] division
-- [ ] square root with Karabusta? Square Root Algorithm
+- [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
 - [ ] radix conversion in dec, oct, hex
     - [ ] create `mpz` from string
     - [ ] format `mpz` as string
 - [ ] write luarocks spec
-- [ ] badge with the licence
 
 ## Medium Priority
 
@@ -22,6 +21,7 @@ most items
 
 - [ ] `mpn.add_word_bounded()` and `mpn.add_word_unbounded()`, which adds a positive Lua integer `< RADIX`
 - [ ] `mpn.sub_word()`, which subtracts a positive Lua integer `< RADIX`
+- [ ] `mpn.mul_with_word()`, which multipies with a positive Lua integer `< RADIX`
 - [ ] combined assignments (`+=` `<<=` `*=` ...)
 - [ ] arbitrary radix conversion from an arbitrary set/sequence of digits (e.g. for base64)
     - [ ] complie a string of digits to a sequence of digits (similar to compiling a regex pattern)
@@ -42,8 +42,7 @@ most items
 
 some items
 
-- [ ] implement square root with Newton's Method (see imath C library)
-- [ ] profile implementations with Karabusta`Sqaure Root and Newton's Method
+
 - [ ] rename source files from `lomp-*.lua` to `lomp/*.lua`<br>
       `require("lomp-*")` --> `require("lomp.*")`
 - [ ] adapt automated test workflow
@@ -52,7 +51,8 @@ some items
         - [ ] `git update-index --chmod=+x <script name>` or the like
 - [ ] increment/decrement (`++` `--`)
     - [ ] pre/post increment/decrement
-- [ ] bitwise operators (`&` `|` `~` `XOR` `<==>` `==>`)
+- [ ] bitwise operators (`&` `|` `~` `XOR`)
+- [ ] `mpn.minimize_at_right()`
 - [ ] more workflows:
     - preferably together with the automated test workflow
     - This require multiple some kind of output variables.
@@ -63,4 +63,8 @@ some items
 ## Ideas
 
 - [ ] badge with the version number
+- [ ] badge with the licence
+- [ ] implement square root with Newton's Method (see imath C library)
+- [ ] implement square root with adapted Algorithm D
+- [ ] profile different implementations for square root
 - [ ] floating point module `mpf`

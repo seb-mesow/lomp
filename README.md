@@ -14,7 +14,7 @@ It should also work for later Lua versions.
 
 Because the module is written in Lua and only use simple algorithms it is neither very fast nor efficient. Thus it is *not recommeded* to use this module for:
 - cryptography 
-- numbertheory
+- number theory
 - astronomy
 - fast computer graphics
 - fast computer vision
