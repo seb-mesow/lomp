@@ -16,4 +16,10 @@
     "yaml.validate": true,
     "yaml.format.enable": false,
     "editor.trimAutoWhitespace": false,
+    "Lua.diagnostics.globals": [
+        "lfs"
+    ],
+    "Lua.workspace.library": [
+        "${3rd}/lfs/library"
+    ],
 }

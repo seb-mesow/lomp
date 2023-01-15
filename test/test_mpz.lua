@@ -10,6 +10,16 @@ local RADIX = mpn.limb_radix()
 local WIDTH = mpn.limb_width()
 local HOST_WIDTH = mp_aux.host_width()
 
+--- returns `math.maxinteger` if `int == max.mininteger` (in contrast to `abs()`)
+---@param int integer Lua integer
+local function abs(int)
+    local int_abs = math.abs(int)
+    if int_abs < 0 then
+        return math.maxinteger
+    end
+    return int_abs
+end
+
 local function __table_insert_unique(t, v)
     local already_in_table = false 
     for _, _v in pairs(t) do
@@ -332,25 +342,10 @@ function test_abs()
     ---@param num integer
     ---@param int mpz
     local function test_case(num, int)
-        --TEST_MSG_ON()
-        -- TEST_OP_NAME("mpz:abs()")
-        -- BEGIN_TEST_CASE()
-        local exp_num = math.abs(num)
-        if exp_num < 0 then
-            assert( num == math.mininteger )
-            local int_a = mpz.new(math.mininteger)
-            -- BEGIN_TEST_OP()
-            local int_b = mpz.abs(int_a)
-            -- END_TEST_OP()
-            assert_true( mpz.equal(int_b, -int_a) )
-        else
-            -- BEGIN_TEST_OP()
-            local res_int = mpz.abs(int)
-            -- END_TEST_OP()
-            local res_num = res_int:to_lua_int()
-            assert_equals(res_num, exp_num)
-        end
-        -- END_TEST_CASE()
+        local exp_num = abs(num)
+        local res_int = mpz.abs(int)
+        local res_num = res_int:to_lua_int()
+        assert_equals(res_num, exp_num)
     end
     
     apply_on_tuples(test_case)
@@ -513,14 +508,14 @@ function test_add_sub()
     apply_on_pairs(test_case)
 end
 
-function DISABLED_test_mul()
+function test_mul()
     ---@param self  test_tuple
     ---@param other test_tuple
     local function test_case(self, other)
-        local self_num_abs = math.abs(self.num)
-        local other_num_abs = math.abs(other.num)
-        if  self_num_abs  <= (math.maxinteger / other_num_abs)
-        and other_num_abs <= (math.maxinteger / self_num_abs) then
+        local self_num_abs = abs(self.num)
+        local other_num_abs = abs(other.num)
+        if  ( self_num_abs  <= (math.maxinteger / other_num_abs) )
+        and ( other_num_abs <= (math.maxinteger / self_num_abs ) ) then
             local exp_num = self.num * other.num
             -- ignore wrapping around
             if ( (self.num < 0) == (other.num < 0) ) == (exp_num >= 0) then
@@ -534,10 +529,10 @@ function DISABLED_test_mul()
     apply_on_pairs(test_case)
     
     local maxinteger_int = mpz.new(math.maxinteger)
-    local dummy =  maxinteger_int *  maxinteger_int
-          dummy =  maxinteger_int * -maxinteger_int
-          dummy = -maxinteger_int *  maxinteger_int
-          dummy = -maxinteger_int * -maxinteger_int
+    local _ =  maxinteger_int *  maxinteger_int
+          _ =  maxinteger_int * -maxinteger_int
+          _ = -maxinteger_int *  maxinteger_int
+          _ = -maxinteger_int * -maxinteger_int
 end
 
 function DISABLED_test_div()

@@ -1,4 +1,5 @@
 local msg = require("lomp-msg")
+local err_msg = require("lomp-err_msg")
 local aux = require("lomp-aux")
 
 -- mpn is the INTERNAL module for the implementation of the actual
@@ -286,84 +287,94 @@ end
 ---
 ---@param t integer[] range array
 ---@param i integer   range start index
----@param e integer   source end index
+---@param e integer   range end index
 ---
+---@nodiscard
 ---@return boolean ok whether all requirements are met
+---@return err_msg? err_msg describes the failed requirements
 function mpn.__is_valid(t, i, e)
-    local ok = true
+    local em = err_msg.new()
+    
     local t_type = type(t)
     if not rawequal(t_type, "table") then
-        msg.warnf("The provided argument for the natural integer's table"
+        em:appendf("The provided argument for the range array"
                  .." is not a table.\nInstead it is a %s .", t_type)
-        ok = false
     end
     local i_math_type = math.type(i)
     if not rawequal(i_math_type, "integer") then
         local i_type = i_math_type or type(i)
-        msg.warnf("The provided argument for the natural integer's start index"
-                 .." is not an integer.\nInstead it is a %s .", i_type)
-        ok = false
+        em:appendf("The provided argument for the range start index"
+                 .." is not a Lua integer.\nInstead it is a %s .", i_type)
     end
     local e_math_type = math.type(e)
     if not rawequal(e_math_type, "integer") then
         local e_type = e_math_type or type(e)
-        msg.warnf("The provided argument for the natural integer's end index"
-                 .." is not an integer.\nInstead it is a %s .", e_type)
-        ok = false
+        em:appendf("The provided argument for the range end index"
+                 .." is not an Lua integer.\nInstead it is a %s .", e_type)
     end
+    
+    -- do not check further, if arguments are not of correct type
+    if em:has_error() then
+        return em:pass_to_assert()
+    end
+    
     if e < i then
-        msg.warnf("The provided argument for the natural integer's end index"
+        em:appendf("The provided argument for the range end index"
                  .." is less than that for the start index."
                  .."\ni == %d, e == %d", i, e)
-        ok = false
     end
+    
     while i < e do
         local limb = t[i]
         if rawequal(limb, nil) then
-            msg.warnf("The provided table misses the limb at index %d.", i)
-            ok = false
+            em:appendf("The provided range array misses the limb at index %d.", i)
         else
             local limb_math_type = math.type(limb)
             if rawequal(limb_math_type, "integer") then
                 if limb < 0 then
-                    msg.warnf("The integer at the index %d of the provided"
-                             .." table is negative."
+                    em:appendf("The Lua integer at the index %d of the provided"
+                             .." range array is negative."
                              .."\ntable[%d] == %X (hex).", i, i, limb)
-                    ok = false
                 elseif limb >= RADIX then
-                    msg.warnf("The integer at the index %d of the provided" 
-                             .." table is greater than or equal"
+                    em:appendf("The Lua integer at the index %d of the provided" 
+                             .." range array is greater than or equal"
                              .." to the RADIX %d."
-                             .."\ntable[%d] == %X (hex).", i, i, limb)
-                    ok = false
+                             .."\nrange_array[%d] == %X (hex).", i, i, limb)
                 end
             else
                 local limb_type = limb_math_type or type(limb)
-                msg.warnf("The value at the index %d of the provided table"
-                         .." is not an integer."
+                em:appendf("The value at the index %d of the provided range array"
+                         .." is not a Lua integer."
                          .."\nInstead it is a %s .", limb_type)
-                ok = false
             end
         end
         i = i +1
     end
-    return ok
+    
+    return em:pass_to_assert()
 end
 
+---@nodiscard
+---@return boolean ok whether the range is valid input
+---@return err_msg? err_msg describes the failed requirements
 function mpn.assert_is_valid_input(t, i, e) -- source
-    local ok = true
+    local em = err_msg.new()
+    
     if  math.type(i) == "integer"
     and math.type(e) == "integer"
     and e <= i then
-        msg.warnf("The provided argument for the INPUTTED natural integer's" 
+        em:appendf("The provided argument for the INPUTTED range" 
                  .." end index is less or equal than that of for the"
                  .." start index."
                  .."\ni==%d, e==%e"
-                 .."\nNote that an INPUTTED natural integer must not be zero.",
+                 .."\nNote that an INPUTTED range must not be zero.",
                    i, e)
-        ok = false
     end
-    return mpn.__is_valid(t, i, e) and ok
+    
+    local _, is_valid_em = mpn.__is_valid(t, i, e)
+    em:append(is_valid_em)
+    
+    return em:pass_to_assert()
 end
 
 -- for debugging
@@ -545,6 +556,74 @@ function mpn.try_to_lua_int(t, i, e)
     assert( free_bits >= 1 )-- DEBUG
     assert( int >= 0 )-- DEBUG
     return int
+end
+
+--- finds the index of the first non-zero limb from the more significant end ("left") 
+--- 
+--- If all limbs are zero or the range is empty, then the returned index is less than `i`.
+---
+---@param t integer[] range array
+---@param i integer   range start index
+---@param e integer   range end   index
+---
+---@nodiscard
+---@return integer left_most_non_zero_index index of the left most non-zero limb
+---
+--- Preconditions:
+--- - `e >= i`
+--- 
+--- Postconditions:
+--- - `left_most_non_zero_index < e`
+--- - `left_most_non_zero_index < i` <==> All limbs in {`t`, `i`, `e`} are zero. 
+function mpn.find_left_most_non_zero_limb(t, i, e)
+    while (e > i) do
+        e = e -1
+        if t[e] > 0 then
+            return e
+        end
+    end
+    return e - 1
+end
+
+--- checks whether a range is minimal at the more significant end ("left")
+--- 
+--- This means, that the most significant limbs are not zero.
+---
+---@param t integer[] range array
+---@param i integer   range start index
+---@param e integer   range end   index
+---
+---@nodiscard
+---@return boolean is_minimal_at_left whether the range is minimal at the left
+function mpn.is_minimal_at_left(t, i, e)
+    while (e > i) do
+        e = e -1
+        if t[e] <= 0 then
+            return false
+        end
+    end
+    return true
+end
+
+--- minimizes a range at the more significant end ("left")
+--- 
+--- Therefore starting with the most significant limb
+--- removes a sequence of zero limbs.
+--- Thus the new most significant limb is greater than or equals `1`.
+---
+---@param t integer[] range array
+---@param i integer   range start index
+---@param e integer   range end   index
+---
+---@nodiscard
+---@return integer new_de range new end index
+function mpn.minimize_at_left(t, i, e)
+    e = e -1 -- calc last index
+    while (e >= i) and (t[e] <= 0) do
+        t[e] = nil
+        e = e -1
+    end
+    return e +1
 end
 
 --- copies a range to another
@@ -1474,17 +1553,17 @@ end
 ---
 --- The source ranges and the destination range must not overlap! (currently)
 ---
----@param dt integer[] destination range
----@param di integer   destination start index
+---@param dt integer[] destination range array
+---@param di integer   destination range start index
 ---@param st integer[] self source range
 ---@param si integer   self source range start index
 ---@param se integer   self source range end index
----@param ot integer[] other source range
+---@param ot integer[] other source range array
 ---@param oi integer   other source range start index
 ---@param oe integer   other source range end index
 ---
 ---@nodiscard
----@return integer de destination end index == `di - se + si`
+---@return integer de destination range end index == `di - se + si`
 ---@return boolean is_negative whether the directed difference self range - other range is negative
 function mpn.diff(dt, di,
                   st, si, se,
@@ -1513,33 +1592,40 @@ function mpn.diff(dt, di,
     end
 end
 
--- multiplies the absolute values
--- If the product is zero, then it also sets the sign
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     if self.n < 1 then res:__is_valid_()
---     else               res:__is_valid_excl_sign()
-function mpn:__mul_abs(other)
-    if self.n < 1 or other.n < 1 then
-        return Integer.ZERO()
+--- multiplies two ranges
+--- 
+--- The source ranges and the destination range must not overlap! (currently)
+---
+--- The most significant limb of `dt` at `de-1` can be zero.
+--- 
+---@param dt integer[] destination range
+---@param di integer   destination start index
+---@param st integer[] multiplicand source range ("self")
+---@param si integer   multiplicand source range ("self") start index
+---@param se integer   multiplicand source range ("self") end index
+---@param ot integer[] multiplier source range ("other")
+---@param oi integer   multiplier source range ("other") start index
+---@param oe integer   multiplier source range ("other") end index
+---
+---@nodiscard
+---@return integer de destination range end index `== di + se-si + oe-oi`
+function mpn.mul(dt, di, -- destination range
+                 st, si, se, -- self source range
+                 ot, oi, oe) -- other source range
+    
+    if (se <= si) or (oe <= oi) then
+        return di -- product is null
     end
     
-    assert( self.n > 0 )-- DEBUG
-    assert( other.n > 0 )-- DEBUG
-    
-    local self_n, other_n = self.n, other.n
-    local res_n = self_n + other_n -1
-    
-    local res = setmetatable({}, __Integer_meta)
+    local de = di + se-si + oe-oi -1
+    -- DIRECTLY points to the to last possible limb
     
     -- obvious implementation of schoolbook algorithm:
     -- self is the "multiplicand". other is the "multiplier".
     
     -- fill with zeros
-    for i = 0, res_n do
-        res[i] = 0
+    for oj = di, de do
+        dt[oj] = 0
     end
     -- Imagine the limbs of the multiplicand self written at the top in a row.
     -- The significance of the limbs of self increases to the left. 
@@ -1548,8 +1634,8 @@ function mpn:__mul_abs(other)
     -- Imagine the limbs of the product res written at the bottom in a row.
     -- The significance of the limbs of res increases to the left.
     -- The algorithm can be described as:
-    --   - compute a "product row". These are all limbs of self multiplied with a the fixed limb of other in that row.
-    --   - shift the product row as j times to the left, where j is the index of the fixed limb of other
+    --   - compute a "product row". These are all limbs of self multiplied with the fixed limb of other in that row.
+    --   - shift the product row j times to the left, where j is the null-based index of the fixed limb of other
     --   - add each such "product row" to the product so far.
     --   - assign the "surplus" carry from the computation of the "product row" to an extra limb
     -- The computation of a product row and adding this to the product so far is done synchronous:
@@ -1557,14 +1643,15 @@ function mpn:__mul_abs(other)
     --   2. add the product of the (next) limb of self with the fixed limb of other to    the appropriate limb of the product
     --   3. compute the new carry from                                                    the appropriate limb of the product
     --   4. compute the new value of the appropriate limb of the product from             the appropriate limb of the product
-    for j = 0, other_n-1 do -- for each product row ...
+    local dj
+    for oj = oi, oe-1 do -- for each product row ...
         local carry = 0
-        local other_j = other[j]
-        for i = 0, self_n-1 do -- ... process all limbs of self
-            local index = i+j
-            local temp = res[index] + carry + self[i] * other_j
+        local otj = ot[oj]
+        for sj = si, se-1 do -- ... process all limbs of self
+            dj = di + oj-oi + sj-si
+            local temp = dt[dj] + carry + st[sj] * otj
             -- This is the formula, which must fit into a Lua integer
-            -- >>>> This formula thus induces the upperbound for WIDTH and RADIX. <<<<
+            -- >>>>> This formula thus induces the upperbound for WIDTH and RADIX. <<<<<
             -- res[index], self[i] and other_j are bounded by RADIX-1 =: L =: 2^l -1
             -- We define W =: 2^w -1 as the RADIX of for positive Integer.
             -- Thus W = math.maxinteger+1
@@ -1573,22 +1660,14 @@ function mpn:__mul_abs(other)
             -- Thus:
             --     l <= w/2
             -- For w = 31 we get l = 15. For w = 63 we get l = 31
-            res[index] = temp & MOD_MASK
+            dt[dj] = temp & MOD_MASK
             carry = temp >> WIDTH
         end
-        res[j+self_n] = carry
+        dt[dj+1] = carry
     end
     
-    -- minimize result:
-    if res[res_n] == 0 then
-        res[res_n] = nil
-        res.n = res_n
-    else
-        res.n = res_n + 1
-    end
-    
-    assert(res:__is_valid_excl_sign())-- DEBUG
-    return res
+    assert(mpn.__is_valid(dt, di, de +1))-- DEBUG
+    return de +1
 end
 
 -- divides the absolute values |self| / |other|

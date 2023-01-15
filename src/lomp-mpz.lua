@@ -1,6 +1,7 @@
 ---@diagnostic disable: invisible
 
 local msg = require("lomp-msg")
+local err_msg = require("lomp-err_msg")
 local mp_aux = require("lomp-aux")
 
 local mpn = require("lomp-mpn")
@@ -33,241 +34,187 @@ local __mpz = {}
 
 local __mpz_meta = { __index = __mpz }
 
+---@private
+---
 --- asserts, that the `mpz` complies with the specification
 --- But the sign is not checked.
+---
+---@nodiscard
 ---@return boolean ok whether the `mpz` is valid, ignoring the sign
+---@return err_msg? err_msg describes the errors
 function __mpz:__is_valid_ignore_sign()
-    local ok = true
-    ---@type integer|nil
+    local em = err_msg.new()
+    ---@type integer?
     local self_n = self.n -- must be set to nil if self.n is zero
     
     -- check type
     if not rawequal(getmetatable(self), __mpz_meta) then
-        msg.warn("Object is not an Integer,"
-               .." because its metatable is not __mpz_meta.") 
-        ok = false
+        em:append("The object is not an mpz,"
+                .." because its metatable is not __mpz_meta.")
     end
     
     -- check self.n
     local type_self_n = type(self_n)
     if rawequal(self_n, nil) then
-        msg.warn("Integer has no field \"n\" for the number of digits")
-        ok = false
+        em:append("The mpz has no field \"n\" for the number of digits")
         self_n = nil
     elseif type_self_n ~= "number" then
-        msg.warnf("Integer has a field \"n\", but it is not a number."
-                .." Instead it is a %s.",
-                  type_self_n)
-        ok = false
+        em:appendf("The mpz has a field \"n\", but it is not a number."
+                 .." Instead it is a %s.",
+                   type_self_n)
         self_n = nil
     else
         local math_type_self_n = math.type(self_n)
         if math_type_self_n ~= "integer" then
-            msg.warnf("Integer has a field \"n\", which is a number,"
-                    .." but it is not an integer. Instead it is a %s.", 
-                      math_type_self_n)
-            ok = false
+            em:appendf("The mpz has a field \"n\", which is a number,"
+                     .." but it is not a Lua integer. Instead it is a %s.", 
+                       math_type_self_n)
             self_n = nil
         elseif self_n < 0 then
-            msg.warnf("Integer has a negative field \"n\". It is %d .", self_n)
-            ok = false
+            em:appendf("The mpz has a negative field \"n\". It is %d .", self_n)
             self_n = nil
         end
     end
     
     -- check each expected integer field
-    if not rawequal(self_n, nil) and self_n > 0 then
-        -- no digit is at the field place self.n
-        local i = self_n
-        repeat
-            i = i -1
-            local self_i = self[i]
-            local type_self_i = type(self_i)
-        until i < 0 or ( type_self_i == "number" and self_i ~= 0 )
-        local most_significant_field_with_non_zero_value = i
-        for i = 0, self_n-1 do
-            local self_i = self[i]
-            if rawequal(self_i, nil) then
-                msg.warnf("Integer misses some expected fields"
-                        .." or its field \"n\" has a too big value:"
-                      .."\nThe field \"n\" has a value of %d,"
-                        .." but the expected integer field %d is missing.",
-                          self_n, i)
-                ok = false
-            else
-                local type_self_i = type(self_i)
-                if type_self_i ~= "number" then
-                    msg.warnf("Integer contains the expected integer field %d,"
-                            .." but its value is not a number."
-                          .."\nInstead it is a %s.",
-                              i, type_self_i)
-                    ok = false
-                else
-                    local math_type_self_i = math.type(self_i)
-                    if math.type(self_i) ~= "integer" then
-                        msg.warnf("Integer contains the expected"
-                                .." integer field %d,"
-                                .." but its value is not an integer."
-                                .."\nInstead it is a %s.",
-                                  i, math_type_self_i)
-                        ok = false
-                    elseif self_i >= mpn.limb_radix() then
-                        msg.warnf("Integer contains the expected"
-                                .." integer field %d, but its value"
-                                .." 0x%04X is >= the RADIX 0x%04X .",
-                                  i, self_i, mpn.limb_radix())
-                        ok = false
-                    elseif self_i < 0 then
-                        msg.warnf("Integer contains the expected"
-                                .." integer field %d,"
-                                .." but its value %d is negative.", i, self_i)
-                        ok = false
-                    elseif most_significant_field_with_non_zero_value < 0 then 
-                        -- all fields are zero
-                        msg.warnf("Integer is zero and not minimal:"
-                                .."\nInteger contains the field %d"
-                                .." with a value of zero"
-                                .." as ALL expected integer fields."
-                                .."\nThus the field \"n\" must have"
-                                .." a value of not %d, but better 0 .",
-                                  i, self_n)
-                        ok = false
-                    elseif (self_i < 1)
-                    and (i > most_significant_field_with_non_zero_value) then
-                        msg.warnf("Integer is not minimal:"
-                                .."\nInteger contains the field %d"
-                                .." with a value of zero, but the most" 
-                                .." significant field with a non-zero value"
-                                .." is only %d ."
-                                .."\nThus the field \"n\" must have"
-                                .." a value of not %d, but better %d .",
-                                  i, most_significant_field_with_non_zero_value,
-                                  self_n, 
-                                  most_significant_field_with_non_zero_value+1)
-                        ok = false
-                    end
-                end
-            end
+    if (not rawequal(self_n, nil)) and (self_n > 0) then
+        ---@cast self_n -nil
+        local _, mpn_is_valid_em = mpn.__is_valid(self, 0, self_n)
+        em:append(mpn_is_valid_em)
+        
+        local left_most_non_zero_index = mpn.find_left_most_non_zero_limb(self, 0, self_n)
+        if left_most_non_zero_index ~= self_n - 1 then
+            em:appendf("The mpz is not minimal:"
+                   .."\nself.n == %d, but the left most non-zero limb is at %d .",
+                        self_n, left_most_non_zero_index)
         end
     end
     
-    -- check each field, especially alls fields with integer keys
+    -- check each field, especially all fields with integer keys
     for k,v in pairs(self) do
-        local type_k = type(k)
-        local type_v = type(v)
-        if ( type_k == "string" ) then
+        local type_k = math.type(k) or type(k)
+        local type_v = math.type(v) or type(v)
+        if type_k == "string" then
             -- check string field
-            if k ~= "n" and k ~= "s" then
-                msg.warnf("Integer contains an unused string field:"
-                      .."\n[%s (%s)] == %s (%s)",
-                          k, type_k, v, type_v)
-                ok = false
+            if (k ~= "n") and (k ~= "s") then
+                em:appendf("The mpz contains an unused string field:"
+                       .."\n[%s (%s)] == %s (%s)",
+                            k, type_k, v, type_v)
             end
-        elseif (type_k == "number") then
-            -- check numeric key
-            local math_type_k = math.type(k)
-            if (math_type_k ~= "integer") then
-                msg.warnf("Integer contains an unused number field:"
-                      .."\n[%s (%s)] == %s (%s)",
-                          k, type_k, v, math_type_k)
-                ok = false
-            elseif k < 0 then
-                msg.warnf("Integer contains the unexpected"
-                        .." negative integer field %d .", k)
-                ok = false
+        elseif type_k == "integer" then
+            if k < 0 then
+                em:appendf("The mpz contains the unexpected"
+                         .." negative integer field %d .", k)
             elseif rawequal(self_n, nil) then
-                msg.warnf("Integer's field \"n\" is \"defunct\""
-                        .." and Integer contains the thus unexpected"
-                        .." integer field %s", k)
-                ok = false
+                em:appendf("The mpz's field \"n\" is \"defunct\""
+                         .." and the mpz contains the thus unexpected"
+                         .." integer field %d", k)
             elseif k >= self_n then
-                msg.warnf("Integer contains the unexpected integer field %d,"
-                        .." which is >= self.n == %d .", k, self_n)
-                ok = false
+                em:appendf("The mpz contains the unexpected integer field %d,"
+                         .." which is >= self.n == %d .", k, self_n)
             end
         else
             -- unused field
-            msg.warnf("Integer contains an unused field:"
-                    .."\n[%s (%s)] == %s (%s)",
-                      mp_aux.sprint_value(k), type_k, 
-                      mp_aux.sprint_value(v), type_v)
-            ok = false
+            em:appendf("The mpz contains an unused field:"
+                   .."\n[%s (%s)] == %s (%s)",
+                       mp_aux.sprint_value(k), type_k, 
+                       mp_aux.sprint_value(v), type_v)
         end
     end
     
-    return ok
+    return em:pass_to_assert()
 end
 
---- asserts, that the sign of the ``mpz` complies with the specification
+
+---@private
 ---
+--- asserts, that the sign of the `mpz` complies with the specification
+---
+---@nodiscard
 ---@return boolean ok whether the sign is valid
+---@return err_msg? err_msg describes the errors
 function __mpz:__is_valid_sign()
-    local ok = true
-    local self_s = self.s
+    local em = err_msg.new()
     
-    if rawequal(self_s, nil) then
-        msg.warn("Integer has no field \"s\" for the sign.")
-        ok = false
+    local self_s = self.s
+    local type_self_s = math.type(self_s) or type(self_s)
+    
+    if type_self_s == "nil" then
+        em:append("The mpz has no field \"s\" for the sign.")
+    elseif type_self_s ~= "boolean" then
+        em:appendf("The mpz has a field \"s\", but it is not a boolean."
+                 .." Instead it is a %s.", type(self.s))
     else
-        local type_self_s = type(self_s)
-        if type_self_s ~= "boolean" then
-            msg.warnf("Integer has a field \"s\", but it is not a boolean."
-                    .." Instead it is a %s.", type(self.s))
-            ok = false
-        else
-            local self_n = self.n
-            if (type(self_n) == "number")
-            and (math.type(self_n) == "integer") 
-            and (self_n < 1)
-            and (self_s) then
-                msg.warnf("Integer is zero, but its sign field \"s\" is true"
-                        .." (which indicates a negative Integer).")
-                ok = false
-            end
+        local self_n = self.n
+        if (type(self_n) == "number")
+        and (math.type(self_n) == "integer") 
+        and (self_n < 1)
+        and (self_s) then
+            em:appendf("The mpz is zero, but its sign field \"s\" is true"
+                     .." (which indicates a negative Integer).")
         end
     end
     
-    return ok
+    return em:pass_to_assert()
 end
 
+---@private
+---
 --- asserts, that the `mpz` complies with the specification
 --- 
 --- The sign is not checked and no expected:
 --- If the `mpz` has a sign, then a warning is raised.
+---
+---@nodiscard
 ---@return boolean ok whether the `mpz` is valid without the sign
+---@return err_msg? err_msg describes the errors
 function __mpz:__is_valid_excl_sign()
+    local em = err_msg.new()
+    
     local ok = __mpz.__is_valid_ignore_sign(self)
     local self_s = self.s
     if not rawequal(self_s, nil) then
-        msg.warnf("Integer already contains the field \"s\" for the sign,"
-                .." which is %s (=^= %s)."
-              .."\nBut because __mpz:__is_valid_excl_sign() was called,"
-              .."\nthe field \"s\" for the sign is not already expected.",
-                  self_s, self_s and "negative" or "non-negative")
-        ok = false
+        em:appendf("The mpz already contains the field \"s\" for the sign,"
+                 .." which is %s (=^= %s)."
+               .."\nBut because __mpz:__is_valid_excl_sign() was called,"
+               .."\nthe field \"s\" for the sign is not already expected.",
+                   self_s, self_s and "negative" or "non-negative")
     end
     if not ok then
-        msg.warnf_callstack("\nThe invalid Integer is\n%s", tostring(self))
+        em:appendf("\nThe invalid mpz is\n%s", tostring(self))
     end
-    return ok
+    
+    return em:pass_to_assert()
 end
 
+---@private
+---
 --- asserts, that the `mpz` fully complies with the specification
+---
+---@nodiscard
 ---@return boolean ok whether the `mpz` is fully valid
+---@return err_msg? err_msg describes the errors
 function __mpz:__is_valid()
-    local ok = __mpz.__is_valid_ignore_sign(self)
-    ok = __mpz.__is_valid_sign(self) and ok
-    if not ok then
-        msg.warnf_callstack("\nThe invalid Integer is\n%s", tostring(self))
+    local _, em = __mpz.__is_valid_ignore_sign(self)
+    if rawequal(em, nil) then
+        em = err_msg.new()
     end
-    return ok
+    ---@cast em -nil
+    local _, sign_em = __mpz.__is_valid_sign(self)
+    em:append(sign_em)
+    if em:has_error() then
+        em:appendf("The invalid mpz is\n%s", tostring(self))
+    end
+    return em:pass_to_assert()
 end
 
-
+---@private
+---
 --- creates a new `mpz` from a Lua integer
 ---
 ---@param int integer Lua integer
 ---
+---@nodiscard
 ---@return mpz new_mpz constructed `mpz` object
 --- 
 --- Postconditions:
@@ -283,11 +230,11 @@ function mpz.__new(int)
             assert( (int-1) >= 0 )-- DEBUG
             self.n = mpn.split_lua_int(self, 0, -- destination
                                        int-1) -- == math.maxinteger
-            -- TODO use mpn.add_1()
-            self.n = mpn.add_unbounded(self, 0, -- destination
-                             self, 0, self.n, -- augend source
-                             {}, 0, 0, -- addend source
-                             1)-- right incoming carry)
+            -- TODO use mpn.add_owrd_unbounded()
+            self.n = mpn.add_unbounded(self, 0,         -- destination
+                                       self, 0, self.n, -- augend source
+                                       {}  , 0, 0     , -- addend source
+                                       1)-- right incoming carry)
             assert(self:__is_valid())-- DEBUG
             return self
         end
@@ -300,6 +247,8 @@ function mpz.__new(int)
     return self
 end
 
+---@private
+---
 --- deep copies the absolute value
 ---
 ---@param self mpz
@@ -365,6 +314,8 @@ function mpz.copy(mpz_or_lua_int)
 end
 mpz.new = mpz.copy
 
+---@private
+---
 --- returns a `mpz` with the same value as its argument
 ---
 ---@param mpz_or_int mpz|integer operand
@@ -507,8 +458,8 @@ function __mpz:to_lua_int()
             int = math.maxinteger ; int_descr = "math.maxinteger"
         end
         msg.warnf("mpz is too big to represent as a Lua integer."
-                .."\nreturning %s"
-                .."\nThe too big mpz is:\n%s",
+              .."\nreturning %s"
+            .."\n\nThe too big mpz is:\n%s",
                   int_descr, self)
     end
     ---@cast int -nil
@@ -668,6 +619,8 @@ function mpz.neg(self)
 end
 __mpz_meta.__unm = mpz.neg
 
+---@private
+---
 --- shift strictly to the left
 --- This may add limbs at the most significant end.
 ---
@@ -695,6 +648,8 @@ function mpz.__lshift(self, res, s)
     -- return res
 end
 
+---@private
+---
 --- shift strictly to the right
 --- 
 --- This may discards some limbs at the least significant end
@@ -799,6 +754,8 @@ function mpz.shr(self, s)
 end
 __mpz_meta.__shr = mpz.shr
 
+---@private
+---
 --- implementation of addition
 --- 
 --- The sign of the returned `sum` equals the sign of the 1st summand `self`.
@@ -830,6 +787,8 @@ function mpz:__add_impl(other)
     return res
 end
 
+---@private
+---
 --- implementation of subtraction
 --- 
 --- also sets the sign of the returend `diff`
@@ -943,31 +902,33 @@ __mpz_meta.__sub = mpz.sub
 ---@return mpz prod product
 ---
 --- Postconditions:
---- - `res:__is_valid()`
+--- - `prod:__is_valid()`
 function mpz.mul(self, other)
     self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     
-    local res = mpz.__mul_abs(self, other)
-    
-    if res.n < 1 then-- DEBUG
-        assert( res:__is_valid() )-- DEBUG
-    else-- DEBUG
-        assert( res:__is_valid_excl_sign() )-- DEBUG
-    end-- DEBUG
-    
-    if res.n > 0 then
-        res.s = self.s ~= other.s
-        -- res. s == false if
-        --    1. self and other are negative     ( -a * -b == +(a * b) with a >= 1 and b >= 1 )
-        -- or 2. self and other are non-negative ( +a * +b == +(a * b) with a >= 0 and b >= 0 )
-        -- res. s == true if
-        --    1. self is negative    , other is non-negative ( -a * +b == -(a * b) with a >= 1 and b >= 0 )
-        -- or 2. self is non-negative, other is negative     ( +a * -b == -(a * b) with a >= 0 and b >= 1 )
+    if (self.n < 1) or (other.n < 1) then
+        return mpz.ZERO()
     end
     
-    assert(res:__is_valid_sign())-- DEBUG
-    return res
+    local prod = setmetatable({
+        s = self.s ~= other.s ;
+        -- prod.s == false / non-negative if
+        --    1. self and other are negative     ( -a * -b == +(a * b) with a >= 1 and b >= 1 )
+        -- or 2. self and other are non-negative ( +a * +b == +(a * b) with a >= 0 and b >= 0 )
+        -- prod.s == true / negative if
+        --    1. self is negative    , other is non-negative ( -a * +b == -(a * b) with a >= 1 and b >= 0 )
+        -- or 2. self is non-negative, other is negative     ( +a * -b == -(a * b) with a >= 0 and b >= 1 )
+    }, __mpz_meta)
+    
+    prod.n = mpn.mul(prod , 0, 
+                     self , 0, self.n ,
+                     other, 0, other.n)
+    
+    prod.n = mpn.minimize_at_left(prod, 0, prod.n)
+    
+    assert(prod:__is_valid())-- DEBUG
+    return prod
 end
 __mpz_meta.__mul = mpz.mul
 
