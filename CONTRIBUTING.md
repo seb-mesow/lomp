@@ -6,12 +6,12 @@ As of January 2023 this project relies on **Lua 5.3** .
 (This is because as of mid 2022 MikTeX's luatex uses Lua 5.3 .)
 
 Ensure that you can run a Lua interpreter from anywhere:
-Open any terminal window an try to execute ``lua -v``.
+Open any terminal window and try to execute ``lua -v``.
 
 ## IDE
 
-The maintainter recommends to use **Visual Studio Code** as the IDE.
-You will need to install the following extentions:
+The maintainer recommends to use **Visual Studio Code** as the IDE.
+You will need to install the following extensions:
 - Lua by sumneko
 - Lua Debug by actboy168
 - Lua Test Adapter by Linus Sunde

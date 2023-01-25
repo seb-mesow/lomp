@@ -5,8 +5,8 @@
 only a few items
 
 - [x] ensure, that running and debugging tests in VS Code works
-- [x] continous integration (automated testing)
-- [ ] multiplication
+- [x] continuous integration (automated testing)
+- [x] multiplication
 - [ ] division
 - [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
@@ -21,17 +21,17 @@ most items
 
 - [ ] `mpn.add_word_bounded()` and `mpn.add_word_unbounded()`, which adds a positive Lua integer `< RADIX`
 - [ ] `mpn.sub_word()`, which subtracts a positive Lua integer `< RADIX`
-- [ ] `mpn.mul_with_word()`, which multipies with a positive Lua integer `< RADIX`
+- [ ] `mpn.mul_with_word()`, which multiplies with a positive Lua integer `< RADIX`
 - [ ] combined assignments (`+=` `<<=` `*=` ...)
 - [ ] arbitrary radix conversion from an arbitrary set/sequence of digits (e.g. for base64)
-    - [ ] complie a string of digits to a sequence of digits (similar to compiling a regex pattern)
+    - [ ] compile a string of digits to a sequence of digits (similar to compiling a regex pattern)
     - [ ] create `mpz` from string
     - [ ] format `mpz` as string
 - [ ] build a fast release version with lmacro
 - [ ] build an asserting debug version with lmacro (esp. for testing)
 - [ ] more workflows:
     - preferably together with the automated test workflow
-    - This require multiple some kind of output variables.
+    - This requires multiple some kind of output variables.
     - [ ] workflow for build status
     - [ ] workflow for code coverage
     - [ ] badge with the build status
@@ -41,7 +41,6 @@ most items
 ## Low Priority
 
 some items
-
 
 - [ ] rename source files from `lomp-*.lua` to `lomp/*.lua`<br>
       `require("lomp-*")` --> `require("lomp.*")`
@@ -58,12 +57,12 @@ some items
     - This require multiple some kind of output variables.
     - [ ] workflow for static analysis/checking
     - [ ] badge with static analysis/checking result
-- [ ] better specifiy/document exceptions
+- [ ] better specify/document exceptions
 
 ## Ideas
 
 - [ ] badge with the version number
-- [ ] badge with the licence
+- [ ] badge with the license
 - [ ] implement square root with Newton's Method (see imath C library)
 - [ ] implement square root with adapted Algorithm D
 - [ ] profile different implementations for square root

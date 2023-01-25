@@ -15,9 +15,9 @@
 - In general *public* tables, methods, functions must not begin with an underscore.
 - In general *private* Tables, variables, methods, functions must begin with two underscores.
 - *private static variables* should by constants.
-  Their identifiers should consists only of uppercase characters and the underscore.
+  Their identifiers should consist only of uppercase characters and the underscore.
   As an exception to those state prior their identifiers should *not* begin with an underscore.
-- The identifiers of datafields should be as short as possible and may not begin with an underscore.
+- The identifiers of data fields should be as short as possible and may not begin with an underscore.
 
 **TODO most of those module-private static variables are captured/copied as upvalues to the methods/functions**
 
@@ -33,7 +33,7 @@ There should be one module per class.
 
 Each class module defines three tables with their names *derived* from the module name
 - `module_name`
-  - provides the *public and privtae static* methods/functions
+  - provides the *public and private static* methods/functions
     - especially the constructor, whose identifier must begin with `new`
   - declared as<br>
    `local __module_name = {}`
@@ -63,10 +63,10 @@ Each class module defines three tables with their names *derived* from the modul
     This automatically provides the parameter `self` which refers to the 1st operand.
     This provides the parameter `other` which refers to the 2nd operand.
 
-No methods/functions should be defined outside of any of these three tables.
+No methods/functions should be defined outside any of these three tables.
 
-Data fields of an object can be accessed by any method or function definied in the module.
-Thus datafields must not be public.
+Data fields of an object can be accessed by any method or function defined in the module.
+Thus data fields must not be public.
 
 The **construction** of an object of a class follows the following pattern:
 ```lua
@@ -75,7 +75,7 @@ function module_name.new(...)
     local self = setmetatable({}, __module_name___meta)
                  -- declares the table self as an object of class module_name
     ...
-    self.datafield = value
+    self.data_field = data_value
     ...
     return self
 end

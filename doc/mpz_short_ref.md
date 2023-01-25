@@ -4,9 +4,9 @@ This class provides big **integers**.
 
 The API follows the following guidelines:
 - If it is known, that at least one operand is a `mpz`, then the operators (metamethods) can be used.<br>
-  exception: For the comparision operators *both* operands must be `mpz`'s.
+  exception: For the comparison operators *both* operands must be `mpz`'s.
 - If it is possible, that *both/all* operands can be Lua integers, then the functions from the `mpz` table must be used.
-- (As of January 2023 operator-like member methods of each `mpz` are reserved for compound assigments like `+=`, `<<=`.)
+- (As of January 2023 operator-like member methods of each `mpz` are reserved for compound assignments like `+=`, `<<=`.)
 
 Because as of January 2023 no method/functions change a `mpz` in-place,
 all `mpz`'s can be considered as immutable.
@@ -187,4 +187,4 @@ hex_lc_str = mpz.hex_lowercase(mpz_or_lua_int)
 debug_str_of_mpz = my_mpz:debug_str()
 debug_str_of_mpz = tostring(my_mpz)
 ```
-- returns a string which denotates each limb in hexadecimal digits
+- returns a string which denotes the *individual limbs* in hexadecimal digits
