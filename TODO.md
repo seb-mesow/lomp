@@ -7,7 +7,7 @@ only a few items
 - [x] ensure, that running and debugging tests in VS Code works
 - [x] continuous integration (automated testing)
 - [x] multiplication
-- [ ] division
+- [x] division
 - [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
 - [ ] radix conversion in dec, oct, hex

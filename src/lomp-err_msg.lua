@@ -25,16 +25,17 @@ function __err_msg:__append(str)
     end
 end
 
---- appends astring to the error message on a new line
+--- appends a string to the error message on a new line
 --- 
 ---@param self err_msg
----@param str_or_err_msg string|err_msg|nil annother string for the error message
+---@param str_or_err_msg string|err_msg|nil another string for the error message
 function __err_msg:append(str_or_err_msg)
     if rawequal(str_or_err_msg, nil) then
         return
     end
     ---@cast str_or_err_msg -nil
-    if rawequal(getmetatable(err_msg), __err_msg_meta) then
+    if rawequal(getmetatable(str_or_err_msg), __err_msg_meta) then
+        ---@cast str_or_err_msg err_msg
         str_or_err_msg = str_or_err_msg.str
     end
     ---@cast str_or_err_msg -err_msg
@@ -74,11 +75,40 @@ end
 ---@param self err_msg
 ---
 ---@nodiscard
----@return boolean has_error whether the `err_msg` represents an error
----@return err_msg? err_msg
+---@return boolean has_succeeded whether the `err_msg` represents *no* error
+---@return err_msg|nil err_msg concrete error message if has failed
 function __err_msg:pass_to_assert()
     if rawequal(self.str, nil) then
         return true
+    end
+    return false, self
+end
+
+--- returns the `err_msg` known to represent an error
+---
+--- Usage: (or similar)
+---```lua
+---function may_failing_func()
+---    ...
+---    if <error condition> then
+---        local em = err_msg.new()
+---        em:append("error message")
+---        return em:pass_error_to_assert()
+---    end
+---    ...
+---end
+---```
+---
+---@param self err_msg
+---
+---@nodiscard
+---@return false has_succeeded whether the `err_msg` represents *no* error, always `false`
+---@return err_msg err_msg concrete error message if has failed
+function __err_msg:pass_error_to_assert()
+    if rawequal(self.str, nil) then
+        local em = err_msg.new()
+        em:append("err_msg at err_msg:pass_error_to_assert() does not represent an error")
+        return em:pass_error_to_assert()
     end
     return false, self
 end

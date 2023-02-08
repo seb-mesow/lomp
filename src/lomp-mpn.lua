@@ -1682,121 +1682,145 @@ end
 --     res:__is_valid_excl_sign()
 --
 -- This is the simple division algorithm tought in elementary schools
-function mpn:__div_abs___single_limb(other)
-    --msg.logf("single-limb division")--DEBUG
-    assert(other.n == 1)--DEBUG
-    assert(self.n >= 1)--DEBUG
-    assert(Integer.__compare_abs(self, other) == 1)--DEBUG
+
+---@private
+---
+--- divides a range by a word
+--- 
+--- rounds the quotient range to zero
+---
+---@param dt integer[] destination range
+---@param di integer   destination start index
+---@param st integer[] dividend source range ("self")
+---@param si integer   dividend source range ("self") start index
+---@param se integer   dividend source range ("self") end index
+---@param o  integer   divisor Lua integer `<= RADIX` ("other")
+---
+---@nodiscard
+---@return integer de destination range end index
+function mpn.__idiv_word(dt, di, -- destination range
+                         st, si, se, -- dividend range
+                         o) -- divisor word
     
-    local q = setmetatable({}, __Integer_meta)
-    local q_n = self.n
+    -- This is the schoolbook division algorithm (still currently taught).
     
-    local d = other[0]
-    local r = 0 -- pad dividend with an extra zero
-    local temp, q_i
-    local i = q_n
+    local r = 0
+    local de = se-si + di
+    local de_ret = de
+    local temp, q
     repeat
-        i = i -1
-        temp = (r << WIDTH) | self[i]
-        q_i = temp // d
-        --msg.logf("0x%04X << + 0x%04X / 0x%04X == 0x%04X, remainder == 0x%04X",--DEBUG
-        --         r, self[i], d, q_i, temp-q_i*d)--DEBUG
-        r = temp - q_i*d-- hopefully a bit faster than temp % d
-        q[i] = q_i
-    until i == 0
+        se = se -1
+        de = de -1
+        temp = (r << WIDTH) | st[se]
+        q = temp // o
+        r = temp - q*o-- hopefully a bit faster than temp % d
+        dt[de] = q
+    until se <= si
     
-    -- Minimize quotient
-    -- Because of the precondition |self| > |other|, we can assume, that
-    -- the quotient is at least 1, und thus we have at least one non-zero limb.
-    i = self.n - 1
-    while q[i] == 0 do
-        q[i] = nil
-        i = i -1
-    end
-    q.n = i + 1
+    -- -- Minimize quotient
+    -- -- Because of the precondition |self| > |other|, we can assume, that
+    -- -- the quotient is at least 1, und thus we have at least one non-zero limb.
+    -- i = self.n - 1
+    -- while q[i] == 0 do
+    --     q[i] = nil
+    --     i = i -1
+    -- end
+    -- q.n = i + 1
     
-    assert(q:__is_valid_excl_sign())-- DEBUG
-    return q
+    -- Note that the result range is not minimized by intention.
+    
+    assert(mpn.__is_valid(dt, di, de_ret))-- DEBUG
+    return de_ret
 end
 
--- divides the absolute values |self| / |other|
--- In contrast to the Lua specification it rounds to zero (and not towards minus infinity)
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
---     other.n > 1
---     self.n >= other.n
---     |self| > |other|
--- Postconditions:
---     res:__is_valid_excl_sign()
---
--- We implement the Algorithm D from
--- Donald E. Knuth:
--- The Art of Computer Programming
--- Volume 2 / Seminumerical Algorithms
--- Third Edition
--- see section 4.3. Multiple-Precision Arithmetic
--- 
--- also see Stefan Kanthak's Webseite
--- https://skanthak.homepage.t-online.de/division.html
--- 
--- Thus see also
--- Henry S. Warren, Jr:
--- Hacker’s Delight
--- Second Edition
-function mpn:__div_abs___algo_d(other)
-    --msg.logf("division with Algorithm D")--DEBUG
-    assert(other.n > 1)--DEBUG
-    assert(self.n >= other.n)--DEBUG
-    assert(Integer.__compare_abs(self, other) == 1)--DEBUG
+---@private
+---
+--- divides a range by another, where the divisor range must consist of multiple limbs
+--- 
+--- rounds the quotient range to zero
+---
+---@param dt integer[] destination range
+---@param di integer   destination start index
+---@param st integer[] dividend source range ("self")
+---@param si integer   dividend source range ("self") start index
+---@param se integer   dividend source range ("self") end index
+---@param ot integer[] divisor source range ("other")
+---@param oi integer   divisor source range ("other") start index
+---@param oe integer   divisor source range ("other") end index
+---
+---@nodiscard
+---@return integer de destination range end index
+function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
+                                   st, si, se, -- dividend (dd) range
+                                   ot, oi, oe) -- divisor (dr) range
     
-    local c_n = self.n -- actually the dividend has one more limb
-    local d_n = other.n
+    -- We implement the Algorithm D from
+    -- Donald E. Knuth:
+    -- The Art of Computer Programming
+    -- Volume 2 / Seminumerical Algorithms
+    -- Third Edition
+    -- see section 4.3. Multiple-Precision Arithmetic
+    -- 
+    -- also see Stefan Kanthak's Webseite
+    -- https://skanthak.homepage.t-online.de/division.html
+    -- 
+    -- Thus see also
+    -- Henry S. Warren, Jr:
+    -- Hacker’s Delight
+    -- Second Edition
+    
+    --msg.logf("division with Algorithm D")--DEBUG
+    -- assert(other.n > 1)--DEBUG
+    -- assert(self.n >= other.n)--DEBUG
+    -- assert(Integer.__compare_abs(self, other) == 1)--DEBUG
+    
+    local dde = se-si -- current dividend (dd) range end index; actually the dividend has one more limb
+    local dre = oe-oi -- current divisior (dr) range end index
     local i, j
     
     -- D1: copy and normalize arguments
     -- divisor[n-1] must be >= floor(RADIX/2) == 2^(WIDTH-1)
-    local c = {} -- at the end c is the remainder
-    local d = {}
+    local ddt = {} -- normalized dividend (dd) range; at the end c is the remainder range
+    local drt = {} -- normalized divisor  (dr) range
         
-    local make_room_shift = Integer.__count_leading_zeros(other[d_n-1], WIDTH)
+    local make_room_shift = aux.count_leading_zeros(ot[oe-1], WIDTH)
     --msg.logf("make_room_shift == %d", make_room_shift)--DEBUG
     
     -- We can expect here, that c_n, d_n >= 1 .
     if make_room_shift == 0 then
-        -- copy dividend
-        i = c_n
-        c[c_n] = 0
+        -- copy dividend (dd) range
+        i = dde
+        ddt[dde] = 0
         repeat
             i = i -1
-            c[i] = self[i]
+            ddt[i] = st[i]
         until i == 0
-        -- copy divisor
-        i = d_n
+        -- copy divisor (dr) range
+        i = dre
         repeat
             i = i -1
-            d[i] = other[i]
+            drt[i] = ot[i]
         until i == 0
     else
         local crop_shift = WIDTH - make_room_shift
-        -- shift dividend
-        i = c_n -1
-        j = self[i] >> crop_shift
-        c[c_n] = j
+        -- shift dividend (dd) range
+        i = dde -1
+        j = st[i] >> crop_shift
+        ddt[dde] = j
         while i ~= 0 do
             j = i - 1
-            c[i] = ( (self[i] << make_room_shift) | (self[j] >> crop_shift) ) & MOD_MASK
+            ddt[i] = ( (st[i] << make_room_shift) | (st[j] >> crop_shift) ) & MOD_MASK
             i = j
         end
-        c[0] = ( self[0] << make_room_shift ) & MOD_MASK
-        -- shift divisor
-        i = d_n -1
+        ddt[0] = ( st[0] << make_room_shift ) & MOD_MASK
+        -- shift divisor (dr) range
+        i = dre -1
         while i ~= 0 do
             j = i - 1
-            d[i] = ( (other[i] << make_room_shift) | (other[j] >> crop_shift) ) & MOD_MASK
+            drt[i] = ( (ot[i] << make_room_shift) | (ot[j] >> crop_shift) ) & MOD_MASK
             i = j
         end
-        d[0] = ( other[0] << make_room_shift ) & MOD_MASK
+        drt[0] = ( ot[0] << make_room_shift ) & MOD_MASK
     end
     -- BEGIN DEBUG
     -- c.n = c_n+1
@@ -1807,38 +1831,35 @@ function mpn:__div_abs___algo_d(other)
     -- msg.logf("  normalized divisor  d     == %s", Integer.debug_string(d))
     -- END DEBUG
     
-    assert( d[d_n-1] >= (RADIX // 2) )-- DEBUG
-    
-    -- initialize quotient
-    local q = setmetatable({}, __Integer_meta)
+    assert( drt[dre-1] >= (RADIX // 2) )-- DEBUG
     
     -- main loop
-    local qhat, rhat, carry, index, temp, d_i_qhat
-    local d_1msl = d[d_n-1] -- most significant limb of divisor
-    local d_2msl = d[d_n-2] -- 2nd most significant limb of divisor
-    -- D2: initialize j (the loop counter) 
-    local q_n = c_n-d_n+1
-    assert(q_n > 0)--DEBUG
-    j = q_n
-    -- indices for 1st, 2nd, 3rd most significant limb of dividend for current iteration
-    local c_1msl_index
-    local c_2msl_index = c_n
-    local c_3msl_index = c_2msl_index-1
+    local qhat, rhat, carry, index, temp, dr_i_qhat
+    local dr_1msl = drt[dre-1] -- most significant limb of divisor (dr)
+    local dr_2msl = drt[dre-2] -- 2nd most significant limb of divisor (dr)
+    -- D2: initialize j (the loop counter)
+    local de = dde-dre+1
+    assert(de > 0)--DEBUG
+    j = de
+    -- indices for 1st, 2nd, 3rd most significant limb of dividend (dd) for current iteration
+    local dd_1msl_index
+    local dd_2msl_index = dde
+    local dd_3msl_index = dd_2msl_index -1
     --msg.logf("d_1msl = 0x%04X, d_2msl = 0x%04X", d_1msl, d_2msl)--DEBUG
     --msg.logf("c_n = %d, d_n = %d, q_n = %d", c_n, d_n, q_n)--DEBUG
     repeat
         j = j -1
         --msg.logf("j = %d", j)--DEBUG
-        c_1msl_index = c_2msl_index
-        c_2msl_index = c_3msl_index
-        c_3msl_index = c_3msl_index -1
+        dd_1msl_index = dd_2msl_index
+        dd_2msl_index = dd_3msl_index
+        dd_3msl_index = dd_3msl_index -1
         --msg.logf("c_1msl = 0x%04X, c_2msl = 0x%04X, c_3msl = 0x%04X", --DEBUG
         --         c[c_1msl_index], c[c_2msl_index], c[c_3msl_index])   --DEBUG
         -- D3: calculate qhat
-        temp = (c[c_1msl_index] << WIDTH) | c[c_2msl_index]
-        qhat = temp // d_1msl
+        temp = (ddt[dd_1msl_index] << WIDTH) | ddt[dd_2msl_index]
+        qhat = temp // dr_1msl
         -- needs extra CPU division: rhat = temp % d_1msl
-        rhat = temp - qhat*d_1msl-- hopefully a bit faster
+        rhat = temp - qhat*dr_1msl-- hopefully a bit faster
         --msg.logf("qhat = %s (before adjustment)", hex(qhat))--DEBUG
         assert(qhat < RADIX +2)--DEBUG qhat <!= RADIX-1 +2
         local adjustment_count = 0--DEBUG
@@ -1850,12 +1871,12 @@ function mpn:__div_abs___algo_d(other)
                         .." at maximum 2 adjustments are expected.")
             end
             -- END DEBUG
-            if qhat >= RADIX or qhat*d_2msl > RADIX*rhat + c[c_3msl_index] then
+            if qhat >= RADIX or qhat*dr_2msl > RADIX*rhat + ddt[dd_3msl_index] then
                 --msg.logf("")--DEBUG
                 --msg.logf("adjust qhat 0x%04X --> 0x%04X", qhat, qhat-1)--DEBUG
                 --msg.logf("adjust rhat 0x%04X --> 0x%04X", rhat, rhat+d_1msl)--DEBUG
                 qhat = qhat -1
-                rhat = rhat + d_1msl
+                rhat = rhat + dr_1msl
                 if rhat >= RADIX then
                     break
                 end
@@ -1889,89 +1910,127 @@ function mpn:__div_abs___algo_d(other)
         i = 0
         repeat
             index = j+i
-            d_i_qhat = d[i] * qhat
-            temp = ( c[index] - ( (d_i_qhat & MOD_MASK) + carry ) ) & TWO_WIDTH_MASK
-            c[index] = temp & MOD_MASK
-            carry = ( (d_i_qhat >> WIDTH) - (temp >> WIDTH) ) & MOD_MASK
+            dr_i_qhat = drt[i] * qhat
+            temp = ( ddt[index] - ( (dr_i_qhat & MOD_MASK) + carry ) ) & TWO_WIDTH_MASK
+            ddt[index] = temp & MOD_MASK
+            carry = ( (dr_i_qhat >> WIDTH) - (temp >> WIDTH) ) & MOD_MASK
             -- I can not 100% strict proof, why the carry is a difference.
             -- But multiple reasons support this.
             i = i +1
-        until i == d_n
+        until i == dre
         index = j+i
-        temp = c[index] - carry
-        c[index] = temp & MOD_MASK
+        temp = ddt[index] - carry
+        ddt[index] = temp & MOD_MASK
         -- D5: Test remainder
         if temp < 0 then -- if subtracted to much
-            carry = 0 -- then add back the divisor once
+            carry = 0 -- then D7: Add back the divisor once to the dividend
             i = 0
             repeat
                 index = j+i
-                temp = c[index] + d[i] + carry
-                c[index] = temp & MOD_MASK
+                temp = ddt[index] + drt[i] + carry
+                ddt[index] = temp & MOD_MASK
                 carry = temp >> WIDTH
                 i = i +1
-            until i == d_n
+            until i == dre
             index = j+i
-            c[index] = c[index] + carry
-            q[j] = qhat - 1
+            ddt[index] = ddt[index] + carry
+            dt[j] = qhat - 1
         else
-            q[j] = qhat
+            dt[j] = qhat
         end
     until j == 0 -- D7: loop on j (end main loop)
     -- D8: Unnormalize (the remainder)
-    -- We do not need it
+    -- We do not need it.
     
     -- Minimize quotient
-    assert(q_n > 0)
-    -- Because of the precondition |self| > |other, we can assume, that
-    -- the quotient is at least 1, und thus we have at least one non-zero limb.
-    i = q_n - 1
-    while q[i] == 0 do
-        q[i] = nil
-        i = i -1
-    end
-    q.n = i + 1
+    assert(de > 0)
+    -- -- Because of the precondition |self| > |other, we can assume, that
+    -- -- the quotient is at least 1, und thus we have at least one non-zero limb.
+    -- i = de - 1
+    -- while q[i] == 0 do
+    --     q[i] = nil
+    --     i = i -1
+    -- end
+    -- q.n = i + 1
     
-    assert(q:__is_valid_excl_sign())-- DEBUG
-    return q
+    assert(mpn.__is_valid(dt, di, de))-- DEBUG
+    return de
 end
 
--- divides the absolute values |self| / |other|
--- If the quotient is zero, then it also sets the sign
--- In contrast to the Lua specification it rounds to zero (and not towards minus infinity)
--- Preconditions:
---     self:__is_valid()
---     other:__is_valid()
--- Postconditions:
---     if self.n < 1 then res:__is_valid_()
---     else               res:__is_valid_excl_sign()
-function mpn:__div_abs(other)
-    if other.n < 1 then
-        msg.error("Tried to divide by zero.")
-        return
-    end
-    if self.n < 1 then
-        --msg.logf("divide zero by non-zero --> quotient = 0")
-        return Integer.ZERO()
+-- TODO check mpn_divrem() on how it diverges between single limb division and multiple limb division
+
+--- divides one range by another
+--- 
+--- The source ranges and the destination range must not overlap! (currently)
+--- 
+---@param dt integer[] destination range
+---@param di integer   destination start index
+---@param st integer[] dividend source range ("self")
+---@param si integer   dividend source range ("self") start index
+---@param se integer   dividend source range ("self") end index
+---@param ot integer[] divisor source range ("other")
+---@param oi integer   divisor source range ("other") start index
+---@param oe integer   divisor source range ("other") end index
+---
+---@nodiscard
+---@return boolean has_succeeded whether no error occurred
+---@return integer|err_msg de_or_err_msg destination range end index or concrete error message
+function mpn.idiv(dt, di, -- destination range
+                  st, si, se, -- dividend range
+                  ot, oi, oe) -- divisor range
+    
+    -- see GMP - mpn/generic/tdiv_qr.c - mpn_tdiv_qr()
+    
+    assert( mpn.__is_valid(st, si, se) )-- DEBUG
+    assert( mpn.__is_valid(ot, oi, oe) )-- DEBUG
+    
+    local ol = oe-oi --- length of divisor
+    
+    if ol < 1 then -- is divisor zero
+        local em = err_msg.new()
+        em:append("Tried to divide by zero.")
+        return em:pass_error_to_assert()
     end
     
-    assert( self.n > 0 )-- DEBUG
-    assert( other.n > 0 )-- DEBUG
-    local compare = Integer.__compare_abs(self, other)
-    if compare == -1 then -- |self| < |other|
-        --msg.log("divide an absolute smaller number by an abolsute bigger number"-- DEBUG
-        --      .." --> quotient = 0")-- DEBUG
-        return Integer.ZERO()
-    elseif compare == 0 then -- |self| == |other|
-        --msg.log("divide a number by an absolute equal number --> |quotient| = 1")-- DEBUG
-        return Integer.ABS_ONE()
-    else -- |self| > |other|
-        if other.n == 1 then
-            return Integer.__div_abs___single_limb(self, other)
-        else
-            return Integer.__div_abs___algo_d(self, other)
-        end       
+    if ol > (se-si) then -- is dividend shorter/less than divisor?
+        return true, di -- then return zero
     end
+    
+    if ol == 1 then
+        -- single-limb/word division
+        return true, mpn.__idiv_word(dt, di,
+                                     st, si, se,
+                                     ot[oi])
+    else
+        return true, mpn.__idiv_multiple_limbs(dt, di,
+                                               st, si, se,
+                                               ot, oi, oe)
+    end
+    
+    -- if other.n < 1 then
+    --     msg.error("Tried to divide by zero.")
+    --     return di -1
+    -- end
+    -- if self.n < 1 then
+    --     --msg.logf("divide zero by non-zero --> quotient = 0")
+    --     return Integer.ZERO()
+    -- end
+    
+    -- local compare = Integer.__compare_abs(self, other)
+    -- if compare == -1 then -- |self| < |other|
+    --     --msg.log("divide an absolute smaller number by an abolsute bigger number"-- DEBUG
+    --     --      .." --> quotient = 0")-- DEBUG
+    --     return Integer.ZERO()
+    -- elseif compare == 0 then -- |self| == |other|
+    --     --msg.log("divide a number by an absolute equal number --> |quotient| = 1")-- DEBUG
+    --     return Integer.ABS_ONE()
+    -- else -- |self| > |other|
+    --     if other.n == 1 then
+    --         return Integer.__div_abs___single_limb(self, other)
+    --     else
+    --         return Integer.__div_abs___algo_d(self, other)
+    --     end       
+    -- end
 end
 
 -- square root

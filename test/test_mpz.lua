@@ -535,7 +535,7 @@ function test_mul()
           _ = -maxinteger_int * -maxinteger_int
 end
 
-function DISABLED_test_div()
+function test_idiv()
     ---@param self  test_tuple
     ---@param other test_tuple
     local function test_case(self, other)
@@ -551,6 +551,11 @@ function DISABLED_test_div()
                 exp_num = exp_num +1
             end
             local res_int = self.int // other.int
+            if self.num == math.mininteger and other.num == -1 then
+                -- alter data to compare with
+                -- TODO expect to big num warning
+                exp_num = math.maxinteger
+            end
             local res_num = res_int:to_lua_int()
             lu.assert_equals(res_num, exp_num)
         end
@@ -559,10 +564,10 @@ function DISABLED_test_div()
     apply_on_pairs(test_case)
     
     local maxinteger_int = mpz.new(math.maxinteger)
-    local dummy =  maxinteger_int *  maxinteger_int
-          dummy =  maxinteger_int * -maxinteger_int
-          dummy = -maxinteger_int *  maxinteger_int
-          dummy = -maxinteger_int * -maxinteger_int
+    local _ =  maxinteger_int //  maxinteger_int
+          _ =  maxinteger_int // -maxinteger_int
+          _ = -maxinteger_int //  maxinteger_int
+          _ = -maxinteger_int // -maxinteger_int
 end
 
 function DISABLED_test_sqrt()

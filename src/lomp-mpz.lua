@@ -19,10 +19,11 @@ local mpn = require("lomp-mpn")
 ---@version 5.3
 local mpz = {}
 
----@class mpz
+---@class mpz an object that represents a large integer
+---
 ---@field private n integer end index / count of limbs
----@field private s boolean sign (true if negative, false if positive or zero)
---- 
+---@field private s boolean sign (false if positive or zero, true if negative)
+---
 ---@operator shl:mpz
 ---@operator shr:mpz
 ---@operator unm:mpz
@@ -41,7 +42,7 @@ local __mpz_meta = { __index = __mpz }
 ---
 ---@nodiscard
 ---@return boolean ok whether the `mpz` is valid, ignoring the sign
----@return err_msg? err_msg describes the errors
+---@return err_msg|nil err_msg describes the errors
 function __mpz:__is_valid_ignore_sign()
     local em = err_msg.new()
     ---@type integer?
@@ -132,7 +133,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean ok whether the sign is valid
----@return err_msg? err_msg describes the errors
+---@return err_msg|nil err_msg describes the errors
 function __mpz:__is_valid_sign()
     local em = err_msg.new()
     
@@ -167,7 +168,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean ok whether the `mpz` is valid without the sign
----@return err_msg? err_msg describes the errors
+---@return err_msg|nil err_msg describes the errors
 function __mpz:__is_valid_excl_sign()
     local em = err_msg.new()
     
@@ -193,7 +194,7 @@ end
 ---
 ---@nodiscard
 ---@return boolean ok whether the `mpz` is fully valid
----@return err_msg? err_msg describes the errors
+---@return err_msg|nil err_msg describes the errors
 function __mpz:__is_valid()
     local _, em = __mpz.__is_valid_ignore_sign(self)
     if rawequal(em, nil) then
@@ -985,6 +986,8 @@ end
 ---
 --- rounds the quotient **towards zero** !
 ---
+--- raises an `err_msg` object, if divided by zero.
+---
 ---@param self  mpz|integer dividend / 1st operand
 ---@param other mpz|integer divisor  / 2nd operand
 ---
@@ -994,25 +997,36 @@ end
 --- Postconditions:
 --- - `quot:__is_valid()`
 function mpz.div(self, other)
-    self = mpz.__ensure_is_mpz(self)
+    self  = mpz.__ensure_is_mpz(self )
     other = mpz.__ensure_is_mpz(other)
     
-    local res = mpz.__div_abs(self, other)
-    if res.n ~= 0 then
-        assert(res:__is_valid_excl_sign())-- DEBUG
-        res.s = self.s ~= other.s
-        -- res. s == false if
-        --    1. self and other are negative     ( -a // -b == +(a // b) with a >= 1 and b >= 1 )
-        -- or 2. self and other are non-negative ( +a // +b == +(a // b) with a >= 0 and b >= 0 )
-        -- res. s == true if
-        --    1. self is negative    , other is non-negative ( -a // +b == -(a // b) with a >= 1 and b >= 0 )
-        -- or 2. self is non-negative, other is negative     ( +a // -b == -(a // b) with a >= 0 and b >= 1 )
-        assert(res:__is_valid_sign())-- DEBUG
-    else
-        assert(res:__is_valid())-- DEBUG
-    end
+    local quot = setmetatable({}, __mpz_meta)
     
-    return res
+    local has_suceeded, quot_n_or_err_msg =
+            mpn.idiv(quot , 0,
+                     self , 0, self.n ,
+                     other, 0, other.n)
+    
+    if has_suceeded then
+        ---@cast quot_n_or_err_msg -err_msg
+        quot.n = mpn.minimize_at_left(quot, 0, quot_n_or_err_msg)
+        if rawequal(quot.n, 0) then
+            quot.s = false
+        else
+            quot.s = self.s ~= other.s ;
+            -- quot.s == false / non-negative if
+            --    1. self and other are negative     ( -a // -b == +(a // b) with a >= 1 and b >= 1 )
+            -- or 2. self and other are non-negative ( +a // +b == +(a // b) with a >= 0 and b >= 0 )
+            -- quot.s == true / negative if
+            --    1. self is negative    , other is non-negative ( -a // +b == -(a // b) with a >= 1 and b >= 0 )
+            -- or 2. self is non-negative, other is negative     ( +a // -b == -(a // b) with a >= 0 and b >= 1 )
+        end
+        assert( quot:__is_valid() ) -- DEBUG
+        return quot
+    else
+        ---@cast err_msg err_msg
+        error(quot_n_or_err_msg)
+    end
 end
 __mpz_meta.__idiv = mpz.div
 
