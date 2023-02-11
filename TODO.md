@@ -7,9 +7,13 @@ only a few items
 - [x] ensure, that running and debugging tests in VS Code works
 - [x] continuous integration (automated testing)
 - [x] multiplication
-- [x] division
+- [x] division without remainder
+- [ ] document behavior of `mpn` algorithms regarding overwriting input ranges
+      and to what memory/range the result is written
+- [ ] division with remainder
 - [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
+- [ ] convenient way to detect overflow at `mpn.try_to_lua_int` and `__mpz:to_lua_int()`
 - [ ] radix conversion in dec, oct, hex
     - [ ] create `mpz` from string
     - [ ] format `mpz` as string
@@ -19,11 +23,13 @@ only a few items
 
 most items
 
+- [ ] rewrite most `mpn` algorithms to overwrite the memory/range of their inputs
+      (favor in-place for combined assignments)
 - [ ] `mpn.add_word_bounded()` and `mpn.add_word_unbounded()`, which adds a positive Lua integer `< RADIX`
 - [ ] `mpn.sub_word()`, which subtracts a positive Lua integer `< RADIX`
 - [ ] `mpn.mul_with_word()`, which multiplies with a positive Lua integer `< RADIX`
 - [ ] combined assignments (`+=` `<<=` `*=` ...)
-- [ ] arbitrary radix conversion from an arbitrary set/sequence of digits (e.g. for base64)
+- [ ] *arbitrary* radix conversion from an *arbitrary* set/sequence of digits (e.g. for base64)
     - [ ] compile a string of digits to a sequence of digits (similar to compiling a regex pattern)
     - [ ] create `mpz` from string
     - [ ] format `mpz` as string
@@ -42,6 +48,8 @@ most items
 
 some items
 
+- [ ] `mpn.add_mul_bounded()` and `mpn.add_mul_unbounded()`, which adds a product
+- [ ] `mpn.sub_mul_bounded()` and `mpn.sub_mul_unbounded()`, which subtracts a product
 - [ ] rename source files from `lomp-*.lua` to `lomp/*.lua`<br>
       `require("lomp-*")` --> `require("lomp.*")`
 - [ ] adapt automated test workflow
