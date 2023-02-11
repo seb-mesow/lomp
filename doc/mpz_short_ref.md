@@ -83,26 +83,26 @@ neg_of_my_mpz = mpz.neg(mpz_or_lua_int)
 ### common operations
 #### add two integers
 ```lua
-sum_mpz = mpz_or_lua_int_a + mpz_or_lua_int_b -- At least on operand must be a mpz!
+sum_mpz = mpz_or_lua_int_a + mpz_or_lua_int_b -- At least one operand must be a mpz!
 sum_mpz = mpz.add(mpz_or_lua_int_a, mpz_or_lua_int_b)
 ```
 
 #### subtract one integer from another
 ```lua
-diff_mpz = my_mpz_a - my_mpz_b -- At least on operand must be a mpz!
+diff_mpz = my_mpz_a - my_mpz_b -- At least one operand must be a mpz!
 diff_mpz = mpz.sub(mpz_or_lua_int_a, mpz_or_lua_int_b)
 ```
 - This computes the "directed difference" which can be negative.
 
 #### multiply two integers
 ```lua 
-prod_mpz = mpz_or_lua_int_a * mpz_or_lua_int_b -- At least on operand must be a mpz!
+prod_mpz = mpz_or_lua_int_a * mpz_or_lua_int_b -- At least one operand must be a mpz!
 prod_mpz = mpz.mul(mpz_or_lua_int_a, mpz_or_lua_int_b)
 ```
 
 #### floor division
 ```lua
-quot_mpz = mpz_or_lua_int_a // mpz_or_lua_int_b -- At least on operand must be a mpz!   
+quot_mpz = mpz_or_lua_int_a // mpz_or_lua_int_b -- At least one operand must be a mpz!
 quot_mpz = mpz.div(mpz_or_lua_int_a, mpz_or_lua_int_b)
 ```
 - The divisor (second operand) must not be zero.<br>
