@@ -66,6 +66,9 @@ some items
     - [ ] workflow for static analysis/checking
     - [ ] badge with static analysis/checking result
 - [ ] better specify/document exceptions
+- [ ] make `mpz.__ensure_is_mpz()` public
+- [ ] `mpz.diff()` for undirected difference/distance
+- [ ] `mpz.copy_sign()`
 
 ## Ideas
 
