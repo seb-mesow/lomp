@@ -5,18 +5,26 @@
 
 **Currently this repository is in alpha status!**
 
-This repository provides the module `mpz` – written only in Lua - for computing with integers "larger than normal". It was created to be used for simple computer graphics, but also can be used for other tasks. It was created for applications, which do not allow or disadvice linking to binary modules[^1].
+This repository provides the module `mpz` – written only in Lua - for computing with integers "larger than normal". It was created to be used for simple computer graphics, but also can be used for other tasks. It was created for applications, which forbid or disadvise linking to binary modules[^1].
 
 - [Short Reference of the `mpz` module](doc/mpz_short_ref.md)
 
 The version 1.0 depends on Lua version 5.3 .
-It should also work for later Lua versions.
+But it should also work with later Lua versions.
 
-Because the module is written in Lua and only use simple algorithms it is neither very fast nor efficient. Thus it is *not recommeded* to use this module for:
-- cryptography 
-- number theory
-- astronomy
+Because the module is written in Lua and only uses the most efficient *basecase* algorithms it is neither very fast nor very efficient.
+Thus this module is **recommended** for:
+- simple computer graphics, geometry
+- simple computer vision
+- education
+- prototypes, proofs of concepts
+- any runtime, which forbids or disadvises binary Lua modules
+
+Thus this module is **not recommended** for:
 - fast computer graphics
 - fast computer vision
+- cryptography
+- number theory
+- astronomy
 
-[^1]: especially for LuaTeX with the `--shell-escape` option.
+[^1]: especially for LuaTeX with the disadvised `--shell-escape` option.
