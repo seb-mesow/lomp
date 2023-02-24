@@ -12,10 +12,8 @@ only a few items
       and to what memory/range the result is written
 - [ ] rewrite most `mpn` algorithms to overwrite the memory/range of their inputs
       (favor in-place for combined assignments)
-    - [ ] `mpn.rshift_few_bounded()`: read and write leftwards
-    - [ ] `mpn.rshift_few_unbounded()`
-    - [ ] `mpn.lshift_few_bounded()`: read and write rightwards
-    - [ ] `mpn.rshift_few_unbounded()`
+    - [x] `rshift_few_bounded___leftward_impl()`
+    - [x] `lshift_few_bounded___rightward_impl()`
 - [ ] division with remainder
 - [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
