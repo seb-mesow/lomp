@@ -1,0 +1,59 @@
+RADIX R = 2^b
+--> R/4 == 2^b/2^2 == 2^(b-2) --> N_3 >= 2^(b-2) == R/4
+--> The 1st most and/or the 2nd most significant bit of N_3 must be 1.
+
+input n = sum n_i
+
+0. If the input fits into one word, then
+   1. compute the square root directly with the "builtin" square root function
+   2. square the square root
+   3. subtract the squared square root from the input to get the remainder
+   4. return
+
+1. left shift n such, that the count of limbs increases
+   up to the next greater or equal multiple of 4
+   and either the 2nd most significant or the 1st most significant bit is 1.
+
+2. Take the higher half of limbs (4th and 3rd quarter of input N_3 and N_2)
+   Recursively compute the square root and remainder of this
+   Thereby
+   - store the square root SOMEWHERE ELSE (1) adjacent to the left of
+     memory reserved for the temporary quotient
+   - store the root remainder adjacent to the left of the 2nd input part N_1
+     thus overwriting the memory for N_3 and N_2
+
+3. left shift the square root by one bit position
+
+4. Take the root remainder left-adjacent with 2nd input part N_1 as dividend
+   and the shifted square root as the divisor
+   Compute the quotient and division remainder
+   Thereby
+   - store the division remainder adjacent to the left of the 1st input part N_0
+     thus overwriting the memory for root remainder with the 2nd input part N_1
+   - store the quotient in the memory reserved for it SOMEWHERE ELSE (1)
+     (adjacent to the right of the square root)
+
+5. right shift the square root back by one bit position
+
+6. compute the square of the quotient
+   store the quotient square adjacent to the left of the division root
+   (For saving allocated memory and better spatial locality for the CPU cache)
+
+7. Take the division remainder left-adjacent with the 1st input quarter N_0
+   and subtract the quotient square from it
+   Thereby:
+   - store the difference at the memory of the subtrahend
+     thus overwriting the memory with the division remainder and the 1st input quarter
+     (This is even useful in Lua.)
+
+Consider the square root left-adjacent with the quotient as the square root to return.
+Consider the difference as the remainder to return.
+
+The effect of the algorithm is as follows:
+- There must be sufficient free/overwriteable memory to the left of the input.
+  (for shifting the input.)
+- The memory with the input is overwritten.
+- The remainder will be written where the input starts.
+  The rest of the memory of the input will be written with something undefined.
+- The square root is written to a new portion of memory
+
