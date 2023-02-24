@@ -8,12 +8,18 @@ only a few items
 - [x] continuous integration (automated testing)
 - [x] multiplication
 - [x] division without remainder
-- [ ] document behavior of `mpn` algorithms regarding overwriting input ranges
+- [x] document behavior of `mpn` algorithms regarding overwriting input ranges
       and to what memory/range the result is written
+- [ ] rewrite most `mpn` algorithms to overwrite the memory/range of their inputs
+      (favor in-place for combined assignments)
+    - [ ] `mpn.rshift_few_bounded()`: read and write leftwards
+    - [ ] `mpn.rshift_few_unbounded()`
+    - [ ] `mpn.lshift_few_bounded()`: read and write rightwards
+    - [ ] `mpn.rshift_few_unbounded()`
 - [ ] division with remainder
 - [ ] square root with Karatsuba Square Root Algorithm
 - [ ] square
-- [ ] convenient way to detect overflow at `mpn.try_to_lua_int` and `__mpz:to_lua_int()`
+- [ ] convenient way to detect overflow (warning) at `mpn.try_to_lua_int` and `__mpz:to_lua_int()`
 - [ ] radix conversion in dec, oct, hex
     - [ ] create `mpz` from string
     - [ ] format `mpz` as string
@@ -23,8 +29,6 @@ only a few items
 
 most items
 
-- [ ] rewrite most `mpn` algorithms to overwrite the memory/range of their inputs
-      (favor in-place for combined assignments)
 - [ ] `mpn.add_word_bounded()` and `mpn.add_word_unbounded()`, which adds a positive Lua integer `< RADIX`
 - [ ] `mpn.sub_word()`, which subtracts a positive Lua integer `< RADIX`
 - [ ] `mpn.mul_with_word()`, which multiplies with a positive Lua integer `< RADIX`
@@ -77,4 +81,5 @@ some items
 - [ ] implement square root with Newton's Method (see imath C library)
 - [ ] implement square root with adapted Algorithm D
 - [ ] profile different implementations for square root
+- [ ] `mpn` algorithm for computing fractional limbs of the inverse square root
 - [ ] floating point module `mpf`

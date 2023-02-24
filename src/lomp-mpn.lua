@@ -33,6 +33,10 @@ local aux = require("lomp-aux")
 -- 
 -- By convention we may also refer to the least significant end of a range as 
 -- the "right" end, and to the most significant end as the "left" end.
+-- If a process like reading and writing happens "rightwards",
+-- then at first the more significant limbs and at last the less significant limbs are considered.
+-- If a process like reading and writing happens "leftwards",
+-- then at first the less significant limbs and at last the more significant limbs are considered.
 -- 
 -- A natural integer is zero, if and only if the start and end index is equal.
 -- A natural integer provied AS INPUT to a mpn function can not be zero.
@@ -457,14 +461,17 @@ function mpn.debug_string_hex(t, i, e)
     return mpn.__debug_string(t, i, e, "hex", DEBUG_STRING_FORMAT_LIMB_HEX)
 end
 
---- converts a non-negative Lua Integer to a range
+--- converts a non-negative Lua integer to a range
 ---
 ---@param t integer[] destination range array
 ---@param i integer   destination range start index
 ---@param int integer non-negative Lua integer to convert from
 ---
 ---@nodiscard
----@return integer de destination end index
+---@return integer e destination end index
+---
+--- range behavior:
+--- - writes `int` leftwards to `(t;i;e)`
 function mpn.split_lua_int(t, i,
                            int)
     
@@ -498,6 +505,9 @@ end
 ---
 ---@nodiscard
 ---@return integer|nil opt_int Lua integer or nil if the value does not fit in a Lua integer.
+---
+--- range behavior:
+--- - reads `(t;i;e)` rightwards
 function mpn.try_to_lua_int(t, i, e)
     assert( mpn.__is_valid(t, i, e) )-- DEBUG
     
@@ -574,7 +584,10 @@ end
 --- 
 --- Postconditions:
 --- - `left_most_non_zero_index < e`
---- - `left_most_non_zero_index < i` <==> All limbs in {`t`, `i`, `e`} are zero. 
+--- - `left_most_non_zero_index < i` <==> All limbs in {`t`, `i`, `e`} are zero.
+---
+--- range behavior:
+--- - reads `(t;i;e)` rightwards
 function mpn.find_left_most_non_zero_limb(t, i, e)
     while (e > i) do
         e = e -1
@@ -595,6 +608,9 @@ end
 ---
 ---@nodiscard
 ---@return boolean is_minimal_at_left whether the range is minimal at the left
+---
+--- range behavior:
+--- - reads `(t;i;e)` rightwards
 function mpn.is_minimal_at_left(t, i, e)
     while (e > i) do
         e = e -1
@@ -609,7 +625,7 @@ end
 --- 
 --- Therefore starting with the most significant limb
 --- removes a sequence of zero limbs.
---- Thus the new most significant limb is greater than or equals `1`.
+--- Thus the new most significant limb is greater than or equals 1.
 ---
 ---@param t integer[] range array
 ---@param i integer   range start index
@@ -617,6 +633,9 @@ end
 ---
 ---@nodiscard
 ---@return integer new_de range new end index
+---
+--- range behavior:
+--- - in `(t;i;e)` removes a continous sequence of zero limbs since including `e-1` rightwards
 function mpn.minimize_at_left(t, i, e)
     e = e -1 -- calc last index
     while (e >= i) and (t[e] <= 0) do
@@ -637,6 +656,11 @@ end
 ---@param e  integer   source range end   index
 ---
 ---@return integer de destination end index (for convenience)
+---
+---range behavior:
+--- - reads `(t;i;e)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(dt;di;de)` and `(t;i;e)` may overlap
 function mpn.copy(dt, di, -- destination by start index
                   t, i, e) -- source
     assert( mpn.__is_valid(t, i, e) )-- DEBUG
@@ -668,13 +692,17 @@ end
 ---
 ---@nodiscard
 ---@return integer cmp_res sign of the directed difference self - other
+---
+--- range behavior:
+--- - reads `(st;si;se)` rightwards
+--- - reads `(ot;oi;oe)` rightwards
 function mpn.cmp(st, si, se, -- 1st source range
                  ot, oi, oe) -- 2nd source range
     
-    assert( mpn.__is_valid( st,  si,  se) )-- DEBUG
+    assert( mpn.__is_valid(st, si, se) )-- DEBUG
     assert( mpn.__is_valid(ot, oi, oe) )-- DEBUG
     
-    local sl = se- si
+    local sl = se-si
     local ol = oe-oi
     local common_l = math.min(sl, ol)
     -- search for first non-zero limb in the more significant limbs of the 
@@ -697,7 +725,7 @@ function mpn.cmp(st, si, se, -- 1st source range
             end
         end
     end
-    assert(  se >=  si+common_l )-- DEBUG
+    assert( se >= si+common_l )-- DEBUG
     assert( oe >= oi+common_l )-- DEBUG
     -- determinate the first limb smaller or greater
     local self_limb, other_limb
@@ -714,7 +742,7 @@ function mpn.cmp(st, si, se, -- 1st source range
     return 0
 end
 
---- shifts range right by a certain count of bit positions
+--- shifts a range right by a certain count of bit positions
 ---
 --- The destination range is truncated at the destination start index ("bounded").
 --- Thus bits from the lower significant end are discarded from the destination,
@@ -722,7 +750,6 @@ end
 ---
 --- The right shift amount must be less than the limb width ("few").
 --- 
---- The source and destination must not overlap! (currently)
 ---
 ---@param dt integer[] destination range array
 ---@param di integer   destination range start index
@@ -733,7 +760,12 @@ end
 ---@param left_incoming_bits integer bits to shift into the more significant end of the destination range
 ---
 ---@return integer de destination end index (for convenience)
----@return integer right_outgoing_bits bits shifted out of the lower significant end of the destination range
+---@return integer right_outgoing_bits bits shifted out of the less significant end of the destination range
+---
+--- range behavior:
+--- - reads `(t;i;e)` rightwards
+--- - writes `(dt;di;de)` rightwards
+--- - `(t;i;e)` and `(dt;di;de)` must not overlap
 function mpn.rshift_few_bounded(
         dt, di, -- destination by start index
         t, i, e, -- source
@@ -787,12 +819,10 @@ end
 ---
 --- All bits from the source range are written to the destination range.
 --- Thus the destination range can be have one limb more than the source range ("unbounded").
---- Thus no bits from the lower significant end are discarded.
+--- Thus no bits from the less significant end are discarded.
 ---
 --- The right shift amount must be less than the limb width ("few")
 --- 
---- The source and destination must not overlap! (currently)
----
 ---@param dt integer[] destination range array
 ---@param de integer   destination range **end** index
 ---@param t  integer[] source range array
@@ -802,6 +832,11 @@ end
 ---@param left_incoming_bits integer bits to shift into the more significant end of the destination range
 ---
 ---@return integer di destination **start** index
+---
+--- range behavior:
+--- - reads `(t;i;e)` rightwards
+--- - writes `(dt;di;de)` rightwards
+--- - `(t;i;e)` and `(dt;di;de)` must not overlap
 function mpn.rshift_few_unbounded(
         dt, de, -- destination by end index
         t, i, e, -- source
@@ -852,10 +887,15 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end  index
 ---@param make_room_shift integer count of bit positions to shift the source range left by
----@param right_incoming_bits integer bits to shift into the lower significant end of the destination range
+---@param right_incoming_bits integer bits to shift into the less significant end of the destination range
 ---
 ---@return integer de destination end index (for convenience)
 ---@return integer left_outgoing_bits bits shifted out of the more significant end of the destination range
+---
+--- range behavior:
+--- - reads `(t;i;e)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(t;i;e)` and `(dt;di;de)` must not overlap
 function mpn.lshift_few_bounded(
         dt, di, -- destination
         t, i, e, -- source
@@ -909,10 +949,15 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end   index
 ---@param left_shift_amount integer count of bit positions to shift the source range left by
----@param right_incoming_bits integer bits to shift into the lower significant end of the destination range
+---@param right_incoming_bits integer bits to shift into the less significant end of the destination range
 ---
 ---@nodiscard
 ---@return integer de destination end index
+---
+--- range behavior:
+--- - reads `(t;i;e)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(t;i;e)` and `(dt;di;de)` must not overlap
 function mpn.lshift_few_unbounded(
         dt, di, -- destination
         t, i, e, -- source
@@ -938,7 +983,7 @@ end
 
 --- shifts a range right by a certain count of bit positions
 --- 
---- Bits, that would be shifted out from the lower significant end of the source range
+--- Bits, that would be shifted out from the less significant end of the source range
 --- are written to the "fractional" destination range.<br>
 --- Bits, that would remain in the source range are written to the "integer" destination range.
 --- 
@@ -975,8 +1020,8 @@ function mpn.rshift_many_bounded(
         return di, fe
     end
         
-    -- Let ft_limbs_ratio be the /rational/ quotient of crop_shift by WIDTH
-    -- Let ft_limbs be the /floored/ integer quotient of crop_shift by WIDTH
+    -- Let ft_limbs_ratio be the /rational/ quotient of crop_shift by WIDTH.
+    -- Let ft_limbs be the /floored/ integer quotient of crop_shift by WIDTH.
     -- Let extra be 1 if crop_shift > 0 and let extra be 0 if crop_shift == 0 .
     -- 
     -- The following inequalites for different indices hold:
@@ -1102,7 +1147,7 @@ end
 
 --- shifts a range right by a certain count of bit positions
 --- 
---- Bits, that would be shifted out from the lower significant end of the source range
+--- Bits, that would be shifted out from the less significant end of the source range
 --- are discarded.
 ---
 --- The source and destination range must not overlap! (currently)
@@ -1185,7 +1230,6 @@ end
 -- The 1st return value is the end index of that additional part
 -- The source and destination range must not overlap! (currently)
 
----@deprecated
 --- shifts a range left by a certain count of bit positions
 --- 
 --- Bits, that would be shifted out from the more significant end of the source range
@@ -1360,8 +1404,6 @@ end
 --- The length of the 1st source range (augend, "self") must be greater than or equal to
 --- the length of the 2nd source range (addend, "other").
 --- 
---- The source ranges and the destination range must not overlap! (currently)
---- 
 ---@param dt integer[] destination range array
 ---@param di integer   destination range start index
 ---@param st integer[] augend source range ("self")  array
@@ -1375,6 +1417,12 @@ end
 ---@nodiscard
 ---@return integer de destination range end index
 ---@return integer carry left outgoing carry
+---
+--- range behavior:
+--- - reads `(st;si;se)` leftwards
+--- - reads `(ot;oi;oe)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(st;si;se)`, `(ot;oi;oe)`, `(dt;di;de)` may overlap
 function mpn.add_bounded(dt, di, -- destination by start index
                          st, si, se, -- augend source "self"
                          ot, oi, oe, -- addend source "other"
@@ -1456,6 +1504,12 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination range end index
+---
+--- range behavior:
+--- - reads `(st;si;se)` leftwards
+--- - reads `(ot;oi;oe)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(st;si;se)`, `(ot;oi;oe)`, `(dt;di;de)` may overlap
 function mpn.add_unbounded(dt, di, -- destination by start index
                            st, si, se, -- augend source "self"
                            ot, oi, oe, -- addend source "other"
@@ -1481,8 +1535,6 @@ end
 --- `RADIX`-complement of the absolute difference (undirected difference).
 --- Then and only then the outgoing borrow bit is 1.
 --- 
---- The source ranges and the destination range must not overlap! (currently)
----
 ---@param dt integer[] destination range array
 ---@param di integer   destination range start index
 ---@param st integer[] subtrahend source range ("self") array
@@ -1496,6 +1548,12 @@ end
 ---@nodiscard
 ---@return integer de destination range end index
 ---@return integer outgoing_borrow left outgoing borrow bit
+---
+--- range behavior:
+--- - reads `(st;si;se)` leftwards
+--- - reads `(ot;oi;oe)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(st;si;se)`, `(ot;oi;oe)`, `(dt;di;de)` may overlap
 function mpn.sub(dt, di,
                  st, si, se,
                  ot, oi, oe,
@@ -1513,11 +1571,11 @@ function mpn.sub(dt, di,
     local saved_si = si
     -- END DEBUG
     
-    -- consider the minuend source range other padded with zero limbs
-    -- at the most significand end with 
+    -- consider the minuend source range other with padded with zero limbs
+    -- at the most significand end
     
     -- only performs "positive normalisation":
-    -- Every limbs must be non-negative. Else RADIX is added.
+    -- All limbs must be non-negative. Else RADIX is added.
     
     local temp
     -- common digits
@@ -1565,6 +1623,16 @@ end
 ---@nodiscard
 ---@return integer de destination range end index == `di - se + si`
 ---@return boolean is_negative whether the directed difference self range - other range is negative
+--- 
+--- range behavior:
+--- 1. with `mpn.cmp()`:
+---     - reads `(st;si;se)` rightwards
+---     - reads `(ot;oi;oe)` rightwards
+--- 2. with `mpn.sub()`:
+---     - reads `(st;si;se)` leftwards
+---     - reads `(ot;oi;oe)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(st;si;se)`, `(ot;oi;oe)`, `(dt;di;de)` may overlap
 function mpn.diff(dt, di,
                   st, si, se,
                   ot, oi, oe)
@@ -1594,7 +1662,6 @@ end
 
 --- multiplies two ranges
 --- 
---- The source ranges and the destination range must not overlap! (currently)
 ---
 --- The most significant limb of `dt` at `de-1` can be zero.
 --- 
@@ -1609,6 +1676,14 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination range end index `== di + se-si + oe-oi`
+---
+--- range behavior:
+--- - reads `(st;si;se)` leftwards
+--- - reads `(ot;oi;oe)` leftwards
+--- - writes `(dt;di;de)` leftwards
+--- - `(st;si;se)` and `(ot;oi;oe)` may overlap
+--- - `(dt;di;de)` and `(st;si;se)` must be distinct
+--- - `(dt;di;de)` and `(ot;oi;oe)` must be distinct (except the most significant limb of `(ot;oi;oe)`)
 function mpn.mul(dt, di, -- destination range
                  st, si, se, -- self source range
                  ot, oi, oe) -- other source range
@@ -1633,7 +1708,7 @@ function mpn.mul(dt, di, -- destination range
     -- The significance of the limbs of other increases downwards.
     -- Imagine the limbs of the product res written at the bottom in a row.
     -- The significance of the limbs of res increases to the left.
-    -- The algorithm can be described as:
+    -- The algorithm can be described as follows:
     --   - compute a "product row". These are all limbs of self multiplied with the fixed limb of other in that row.
     --   - shift the product row j times to the left, where j is the null-based index of the fixed limb of other
     --   - add each such "product row" to the product so far.
@@ -1698,6 +1773,11 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination range end index
+---
+--- range behavior:
+--- - reads `(st;si;se)` rightwards
+--- - writes `(dt;di;de)` rightwards
+--- - `(dt;di;de)` and `(st;si;se)` may overlap
 function mpn.__idiv_word(dt, di, -- destination range
                          st, si, se, -- dividend range
                          o) -- divisor word
@@ -1750,6 +1830,14 @@ end
 ---
 ---@nodiscard
 ---@return integer de destination range end index
+---
+--- range behavior:
+--- - reads `(st;si;se)` rightwards
+--- - reads `(ot;oi;oe)` rightwards
+--- - `(st;si;se)` and `(ot;oi;oe)` may overlap
+--- - writes `(dt;di;de)` leftwards
+--- - `(dt;di;de)` and `(st;si;se)` must be distinct
+--- - `(dt;di;de)` and `(ot;oi;oe)` must be distinct
 function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
                                    st, si, se, -- dividend (dd) range
                                    ot, oi, oe) -- divisor (dr) range
@@ -1837,6 +1925,7 @@ function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
     local qhat, rhat, carry, index, temp, dr_i_qhat
     local dr_1msl = drt[dre-1] -- most significant limb of divisor (dr)
     local dr_2msl = drt[dre-2] -- 2nd most significant limb of divisor (dr)
+    
     -- D2: initialize j (the loop counter)
     local de = dde-dre+1
     assert(de > 0)--DEBUG
@@ -1855,6 +1944,7 @@ function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
         dd_3msl_index = dd_3msl_index -1
         --msg.logf("c_1msl = 0x%04X, c_2msl = 0x%04X, c_3msl = 0x%04X", --DEBUG
         --         c[c_1msl_index], c[c_2msl_index], c[c_3msl_index])   --DEBUG
+        
         -- D3: calculate qhat
         temp = (ddt[dd_1msl_index] << WIDTH) | ddt[dd_2msl_index]
         qhat = temp // dr_1msl
@@ -1921,6 +2011,7 @@ function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
         index = j+i
         temp = ddt[index] - carry
         ddt[index] = temp & MOD_MASK
+        
         -- D5: Test remainder
         if temp < 0 then -- if subtracted to much
             carry = 0 -- then D7: Add back the divisor once to the dividend
@@ -1944,7 +2035,7 @@ function mpn.__idiv_multiple_limbs(dt, di, -- destination (d) range
     
     -- Minimize quotient
     assert(de > 0)
-    -- -- Because of the precondition |self| > |other, we can assume, that
+    -- -- Because of the precondition |self| > |other|, we can assume, that
     -- -- the quotient is at least 1, und thus we have at least one non-zero limb.
     -- i = de - 1
     -- while q[i] == 0 do
