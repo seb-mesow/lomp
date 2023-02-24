@@ -636,9 +636,11 @@ __mpz_meta.__unm = mpz.neg
 --- - `res:__is_valid()`
 function mpz.__lshift(self, res, s)
     assert( s > 0 )-- DEBUG
-    local n = mpn.lshift_many_unbounded(res, 0, -- destination
-                                        self, 0, self.n, -- source
-                                        s) -- left shift amount
+    local n = mpn.lshift_many_unbounded(
+                    res, 0, -- destination
+                    self, 0, self.n, -- source
+                    s, -- left shift amount
+                    mpn.lshift_few_bounded___leftward_impl)
     local nm1 = n -1
     if rawequal(res[nm1], 0) then
         res[nm1] = nil 
@@ -674,7 +676,8 @@ function mpz.__rshift(self, res, right_shift_amount)
     local n = mpn.rshift_many_discard(
             res, 0, -- destination for the integer part of the shifted copy
             self, 0, self.n, -- source
-            right_shift_amount) -- right shift amount
+            right_shift_amount, -- right shift amount
+            mpn.rshift_few_bounded___rightward_impl)
     local nm1 = n -1
     if rawequal(res[nm1], 0) then
         res[nm1] = nil 

@@ -890,62 +890,6 @@ function mpn.rshift_few_bounded___leftward_impl(
     return di +1, right_outgoing_bits
 end
 
---- shifts a range right by a certain, small count of bit positions
----
---- All bits from the source range are written to the destination range.
---- Thus the destination range can be have one limb more than the source range ("unbounded").
---- Thus no bits from the less significant end are discarded.
----
---- The right shift amount must be less than the limb width ("few")
---- 
----@param dt integer[] destination range array
----@param de integer   destination range **end** index
----@param t  integer[] source range array
----@param i  integer   source range start index
----@param e  integer   source range end   index
----@param right_shift_amount integer count of bit positions to shift the source range right by
----@param left_incoming_bits integer bits to shift into the more significant end of the destination range
----
----@return integer di destination **start** index
----
---- range behavior:
---- - reads `(t;i;e)` rightwards
---- - writes `(dt;di;de)` rightwards
---- - `(t;i;e)` and `(dt;di;de)` must not overlap
-function mpn.rshift_few_unbounded(
-        dt, de, -- destination by end index
-        t, i, e, -- source
-        right_shift_amount, -- right shift amount
-        left_incoming_bits)
-    -- BEGIN DEBUG
-    assert( math.type(right_shift_amount) == "integer","left shift amount must be an integer")
-    assert( right_shift_amount > 0 , "right shift amount must be positive.")
-    assert( right_shift_amount < WIDTH , "right shift amount must be less than WIDTH.")
-    assert( mpn.__is_valid(t, i, e) )
-    -- END DEBUG
-    
-    local di = de - e+i
-    local _de, rem_bits = mpn.rshift_few_bounded___rightward_impl(
-                                dt, di, -- destination by start index
-                                t, i, e, -- source
-                                right_shift_amount, -- right shift amount
-                                left_incoming_bits)
-    -- BEGIN DEBUG
-    assert( _de == de , f("s == %d"
-                        .."\nsource range == %s"
-                        .."\nresult range == %s"
-                        .."\n_de == %d ~= de == %d",
-                          right_shift_amount,
-                          mpn.debug_string_hex(t, i, e),
-                          mpn.debug_string_hex(dt, di, _de),
-                          _de, de) )
-    -- END DEBUG
-    di = di -1
-    dt[di] = rem_bits
-    assert( mpn.__is_valid(dt, di, de) )-- DEBUG
-    return di
-end
-
 --- shifts a range left by a certain, small count of bit positions
 ---
 --- The destination range is truncated to the length of the source range ("bounded").
@@ -1086,6 +1030,67 @@ function mpn.lshift_few_bounded___rightward_impl(
     return de, left_outgoing_bits
 end
 
+---@alias rshift_few_bounded_func fun(dt: integer[], di: integer, t: integer[], i: integer, e: integer, crop_shift     : integer, left_incoming_bits : integer): de: integer, right_outgoing_bits: integer
+---@alias lshift_few_bounded_func fun(dt: integer[], di: integer, t: integer[], i: integer, e: integer, make_room_shift: integer, right_incoming_bits: integer): de: integer, left_outgoing_bits : integer
+
+--- shifts a range right by a certain, small count of bit positions
+---
+--- All bits from the source range are written to the destination range.
+--- Thus the destination range can be have one limb more than the source range ("unbounded").
+--- Thus no bits from the less significant end are discarded.
+---
+--- The right shift amount must be less than the limb width ("few")
+--- 
+---@param dt integer[] destination range array
+---@param de integer   destination range **end** index
+---@param t  integer[] source range array
+---@param i  integer   source range start index
+---@param e  integer   source range end   index
+---@param right_shift_amount integer count of bit positions to shift the source range right by
+---@param left_incoming_bits integer bits to shift into the more significant end of the destination range
+---@param rshift_few_bounded_func rshift_few_bounded_func `mpn.rshift_few_bounded___rightward_impl` or `mpn.rshift_few_bounded___leftward_impl`
+---
+---@nodiscard
+---@return integer di destination **start** index
+---
+--- range behavior:
+--- - see selected `rshift_few_bounded_func`
+function mpn.rshift_few_unbounded(
+        dt, de, -- destination by end index
+        t, i, e, -- source
+        right_shift_amount, -- right shift amount
+        left_incoming_bits,
+        rshift_few_bounded_func
+    )
+    -- BEGIN DEBUG
+    assert( math.type(right_shift_amount) == "integer","left shift amount must be an integer")
+    assert( right_shift_amount > 0 , "right shift amount must be positive.")
+    assert( right_shift_amount < WIDTH , "right shift amount must be less than WIDTH.")
+    assert( mpn.__is_valid(t, i, e) )
+    -- END DEBUG
+    
+    local di = de - e+i
+    local _de, rem_bits = rshift_few_bounded_func(
+                                dt, di, -- destination by start index
+                                t, i, e, -- source
+                                right_shift_amount, -- right shift amount
+                                left_incoming_bits)
+    -- BEGIN DEBUG
+    assert( _de == de , f("s == %d"
+                        .."\nsource range == %s"
+                        .."\nresult range == %s"
+                        .."\n_de == %d ~= de == %d",
+                          right_shift_amount,
+                          mpn.debug_string_hex(t, i, e),
+                          mpn.debug_string_hex(dt, di, _de),
+                          _de, de) )
+    -- END DEBUG
+    di = di -1
+    dt[di] = rem_bits
+    assert( mpn.__is_valid(dt, di, de) )-- DEBUG
+    return di
+end
+
 --- shifts a range left by a certain count of bit positions
 ---
 --- All bits from the source range are written to the destination range.
@@ -1103,19 +1108,20 @@ end
 ---@param e  integer   source range end   index
 ---@param left_shift_amount integer count of bit positions to shift the source range left by
 ---@param right_incoming_bits integer bits to shift into the less significant end of the destination range
+---@param lshift_few_bounded_func lshift_few_bounded_func `mpn.lshift_few_bounded___leftward_impl` or `mpn.lshift_few_bounded___rightward_impl`
 ---
 ---@nodiscard
 ---@return integer de destination end index
 ---
 --- range behavior:
---- - reads `(t;i;e)` leftwards
---- - writes `(dt;di;de)` leftwards
---- - `(t;i;e)` and `(dt;di;de)` must not overlap
+--- - see selected `lshift_few_bounded_func`
 function mpn.lshift_few_unbounded(
         dt, di, -- destination
         t, i, e, -- source
         left_shift_amount, -- left shift amount
-        right_incoming_bits)
+        right_incoming_bits,
+        lshift_few_bounded_func
+    )
     -- BEGIN DEBUG
     assert( math.type(left_shift_amount) == "integer","left shift amount must be an integer")
     assert( left_shift_amount > 0 , "left shift amount must be positive.")
@@ -1123,7 +1129,7 @@ function mpn.lshift_few_unbounded(
     assert( mpn.__is_valid(t, i, e) )
     -- END DEBUG
     
-    local de, rem_bits = mpn.lshift_few_bounded___leftward_impl(
+    local de, rem_bits = lshift_few_bounded_func(
                                 dt, di, -- destination by start index
                                 t, i, e, -- source
                                 left_shift_amount, -- left shift amount
@@ -1140,8 +1146,6 @@ end
 --- are written to the "fractional" destination range.<br>
 --- Bits, that would remain in the source range are written to the "integer" destination range.
 --- 
---- The source and destination range must not overlap! (currently)
---- 
 ---@param dt integer[] integer    destination range array
 ---@param di integer   integer    destination range start index
 ---@param ft integer[] fractional destination range array
@@ -1150,15 +1154,20 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end   index
 ---@param crop_shift integer count of bit positions to shift the source range right by
+---@param rshift_few_bounded_func rshift_few_bounded_func `mpn.rshift_few_bounded___rightward_impl` or `mpn.rshift_few_bounded___leftward_impl`
 ---
 ---@nodiscard
 ---@return integer de integer    destination range   end     index
 ---@return integer fi fractional destination range **start** index
+---
+--- range behavior:
+--- - see selected `rshift_few_bounded_func`
 function mpn.rshift_many_bounded(
         dt, di, -- destination for the integer part of the shifted copy
         ft, fe, -- destination for the fractional part of the shifted copy
         t, i, e, -- source
-        crop_shift -- right shift amount
+        crop_shift, -- right shift amount
+        rshift_few_bounded_func
     )
     -- BEGIN DEBUG
     assert( math.type(crop_shift) == "integer",
@@ -1174,7 +1183,7 @@ function mpn.rshift_many_bounded(
     end
         
     -- Let ft_limbs_ratio be the /rational/ quotient of crop_shift by WIDTH.
-    -- Let ft_limbs be the /floored/ integer quotient of crop_shift by WIDTH.
+    -- Let ft_limbs_trunc be the /floored/ integer quotient of crop_shift by WIDTH.
     -- Let extra be 1 if crop_shift > 0 and let extra be 0 if crop_shift == 0 .
     -- 
     -- The following inequalites for different indices hold:
@@ -1241,7 +1250,7 @@ function mpn.rshift_many_bounded(
         if crop_shift > 0 then
             local _de -- DEBUG
             _de, left_incoming_bits =
-                    mpn.rshift_few_bounded___rightward_impl(
+                    rshift_few_bounded_func(
                             dt, di, -- destination by start index
                             t, i_split, e, -- source
                             crop_shift, -- left shift amount
@@ -1274,12 +1283,13 @@ function mpn.rshift_many_bounded(
                 ft, fi_first_zero_limb, -- destination by end index
                 t, i, i_split, -- source
                 crop_shift, -- left shift amount
-                left_incoming_bits) -- left incoming bits
+                left_incoming_bits, -- left incoming bits
+                rshift_few_bounded_func)
         -- BEGIN DEBUG
         assert( _fi == fi,
                 f("_fi == %d ~= fi == %d", _fi, fi) )
         -- END DEBUG
-    assert( mpn.__is_valid(ft, fi, fe) )-- DEBUG
+        assert( mpn.__is_valid(ft, fi, fe) )-- DEBUG
     else
         local _fi_first_zero_limb = -- DEBUG
         mpn.copy(ft, fi, -- destination by start index
@@ -1311,13 +1321,18 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end   index
 ---@param crop_shift integer count of bit positions to shift the source range right by
+---@param rshift_few_bounded_func rshift_few_bounded_func `mpn.rshift_few_bounded___rightward_impl` or `mpn.rshift_few_bounded___leftward_impl`
 ---
 ---@nodiscard
 ---@return integer de destination range end index
+---
+--- range behavior:
+--- - see selected `lshift_few_bounded_func`
 function mpn.rshift_many_discard(
         dt, di, -- destination by start index
         t, i, e, -- source
-        crop_shift -- right shift amount
+        crop_shift, -- right shift amount
+        rshift_few_bounded_func
     )
     -- BEGIN DEBUG
     assert( math.type(crop_shift) == "integer",
@@ -1334,7 +1349,7 @@ function mpn.rshift_many_discard(
     
     -- compute extra limbs and /necessary/ shift
     local ft_limbs_trunc = crop_shift // WIDTH
-    crop_shift = crop_shift - ft_limbs_trunc*WIDTH
+    crop_shift = crop_shift - ft_limbs_trunc*WIDTH -- crop_shift % WIDTH
     local i_split = math.min(i + ft_limbs_trunc, e)
     local de = di + math.max(e-i - ft_limbs_trunc, 0)
     
@@ -1349,7 +1364,7 @@ function mpn.rshift_many_discard(
     if i_split < e then
         if crop_shift > 0 then
             local _de = -- DEBUG
-                    mpn.rshift_few_bounded___rightward_impl(
+                rshift_few_bounded_func(
                             dt, di, -- destination by start index
                             t, i_split, e, -- source
                             crop_shift, -- left shift amount
@@ -1402,15 +1417,21 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end   index
 ---@param make_room_shift integer count of bit positions to shift the source range left by
+---@param lshift_few_bounded_func lshift_few_bounded_func `mpn.lshift_few_bounded___leftward_impl` or `mpn.lshift_few_bounded___rightward_impl`
 ---
 ---@nodiscard
 ---@return integer de integer    destination range   end     index
 ---@return integer fe fractional destination range **end** index
+---
+--- range behavior:
+--- - see selected `lshift_few_bounded_func`
 function mpn.lshift_many_bounded(
         it, ii, -- destination by start index for shifted out limbs/bits
         ft, fi, -- destination by start index with length equal to source
         t, i, e, -- source
-        make_room_shift)
+        make_room_shift,
+        lshift_few_bounded_func
+    )
     -- BEGIN DEBUG
     assert( math.type(make_room_shift) == "integer",
             "left shift amount must be an integer")
@@ -1464,10 +1485,11 @@ function mpn.lshift_many_bounded(
         if make_room_shift > 0 then
             local _de -- DEBUG
             _de, right_incoming_bits =
-                    mpn.lshift_few_bounded___leftward_impl(ft, fi, -- destination by start index
-                                           t, i, i_split, -- source
-                                           make_room_shift, -- left shift amount
-                                           0) -- right incoming bits
+                    lshift_few_bounded_func(
+                            ft, fi, -- destination by start index
+                            t, i, i_split, -- source
+                            make_room_shift, -- left shift amount
+                            0) -- right incoming bits
             assert( _de == de )-- DEBUG
         else
             assert( de == -- DEBUG
@@ -1484,10 +1506,12 @@ function mpn.lshift_many_bounded(
     -- 4. (homogen or heterogen) filled limbs for rt upto excluding re
     if make_room_shift > 0 then
         local _re = -- DEBUG
-        mpn.lshift_few_unbounded(it, ii, -- destination by start index
-                                 t, i_split, e, -- source
-                                 make_room_shift, -- left shift amount
-                                 right_incoming_bits)
+        mpn.lshift_few_unbounded(
+                it, ii, -- destination by start index
+                t, i_split, e, -- source
+                make_room_shift, -- left shift amount
+                right_incoming_bits,
+                lshift_few_bounded_func)
         -- BEGIN DEBUG
         assert( _re == re, f("_re == %d ~= re == %d", _re, re) )
         -- END DEBUG
@@ -1520,13 +1544,18 @@ end
 ---@param i  integer   source range start index
 ---@param e  integer   source range end index
 ---@param make_room_shift integer count of bit positions to shift the source range left by
+---@param lshift_few_bounded_func lshift_few_bounded_func `mpn.lshift_few_bounded___leftward_impl` or `mpn.lshift_few_bounded___rightward_impl`
 ---
 ---@nodiscard
 ---@return integer de destination range end index
+---
+--- range behavior:
+--- - see selected `lshift_few_bounded_func`
 function mpn.lshift_many_unbounded(
         dt, di, -- destination by start index
         t, i, e, -- source
-        make_room_shift -- left shift amount
+        make_room_shift, -- left shift amount
+        lshift_few_bounded_func
     )
     -- BEGIN DEBUG
     assert( math.type(make_room_shift) == "integer",
@@ -1534,6 +1563,7 @@ function mpn.lshift_many_unbounded(
     assert( make_room_shift > 0 , "left shift amount must be positive.")
     assert( mpn.__is_valid(t, i, e) )
     -- END DEBUG
+    
     local de
           , de_in_between-- DEBUG
             = mpn.lshift_many_bounded(
@@ -1542,7 +1572,9 @@ function mpn.lshift_many_unbounded(
                     dt, di, -- destination by start index,
                             -- length equal to source
                     t, i, e, -- source
-                    make_room_shift) -- left shift amount
+                    make_room_shift, -- left shift amount
+                    lshift_few_bounded_func)
+    
     -- BEGIN DEBUG
     assert( de_in_between == di+e-i )
     assert( mpn.__is_valid(dt, di, de_in_between) )
