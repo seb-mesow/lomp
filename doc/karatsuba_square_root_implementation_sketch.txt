@@ -4,47 +4,61 @@ RADIX R = 2^b
 
 input n = sum n_i
 
-0. If the input fits into one word, then
+1. If the input fits is two limbs or less, then
    1. compute the square root directly with the "builtin" square root function
    2. square the square root
    3. subtract the squared square root from the input to get the remainder
    4. return
 
-1. left shift n such, that the count of limbs increases
-   up to the next greater or equal multiple of 4
-   and either the 2nd most significant or the 1st most significant bit is 1.
+2. left shift n such, that the count of limbs increases
+   up to the next greater or equal multiple of 2
+   and the most significant bit is 1.
 
-2. Take the higher half of limbs (4th and 3rd quarter of input N_3 and N_2)
-   Recursively compute the square root and remainder of this
+3. Take the higher "half" of limbs (4th and 3rd quarter of input N_3 and N_2)
+   Recursively compute the partial square root and partial root remainder of this
    Thereby
-   - store the square root SOMEWHERE ELSE (1) adjacent to the left of
+   - store the partial square root SOMEWHERE ELSE (1) adjacent to the left of
      memory reserved for the temporary quotient
-   - store the root remainder adjacent to the left of the 2nd input part N_1
+   - store the partial root remainder adjacent to the left of the 2nd input part N_1
      thus overwriting the memory for N_3 and N_2
 
-3. left shift the square root by one bit position
-
-4. Take the root remainder left-adjacent with 2nd input part N_1 as dividend
-   and the shifted square root as the divisor
-   Compute the quotient and division remainder
+4. Take the partial root remainder left-adjacent with 2nd input part N_1 as dividend
+   and the UNSHIFTED partial square root as the divisor
+   Compute the doubled quotient and the to less division remainder
    Thereby
-   - store the division remainder adjacent to the left of the 1st input part N_0
+   - store the to less division remainder adjacent to the left of the 1st input part N_0
      thus overwriting the memory for root remainder with the 2nd input part N_1
-   - store the quotient in the memory reserved for it SOMEWHERE ELSE (1)
-     (adjacent to the right of the square root)
+   - store the doubled quotient in the memory reserved for it SOMEWHERE ELSE (1)
+     (adjacent to the right of the partial square root)
 
-5. right shift the square root back by one bit position
+5. right shift the doubled quotient by 1 bit position to get the quotient
 
-6. compute the square of the quotient
-   store the quotient square adjacent to the left of the division root
+6. if the doubled quotient is/was odd,
+   then to the to less division remainder add the partial square root
+        to get the division remainder
+
+(The steps 5 and 6 are interchangable.)
+
+7. compute the square of the quotient
+   store the quotient square adjacent to the left of the partial root remainder
    (For saving allocated memory and better spatial locality for the CPU cache)
 
-7. Take the division remainder left-adjacent with the 1st input quarter N_0
+8. Take the division remainder left-adjacent with the 1st input quarter N_0
    and subtract the quotient square from it
+   to get the root remainder
    Thereby:
-   - store the difference at the memory of the subtrahend
+   - store the root remainder at the memory of the subtrahend
      thus overwriting the memory with the division remainder and the 1st input quarter
      (This is even useful in Lua.)
+
+9. If the difference is negative,
+   then correct the square root and the root remainder
+
+9.1 to the root remainder add the double of the square root (addmul)
+
+9.2 from the root remainder subtract 1
+
+9.3 from the square root subtract 1
 
 Consider the square root left-adjacent with the quotient as the square root to return.
 Consider the difference as the remainder to return.
@@ -57,3 +71,218 @@ The effect of the algorithm is as follows:
   The rest of the memory of the input will be written with something undefined.
 - The square root is written to a new portion of memory
 
+===== Mathematical Description of the Algorithm =====
+
+Algorithm SqrtRem( I ):
+Input: range I with even length m (radix N^2)
+Output: square root S and square root remainder R of M
+Postconditions:
+  - S^2 <= I
+  - I < (S+1)^2
+  - S^2 + R == I
+Implementaion: (# starts a comment)
+1. # compute radices for splitting:
+    1. compute radix N, which corresponds to the "half" of radix M
+    2. compute radix L, which corresponds to the floored "half" of radix N
+    3. compute radix H, which corresponds to the "difference" of the radices N and L
+2. split the input range into N23, N1 and N0,
+   such that I == N23*L^2 + N1*L + N0
+   # N23 < H^2
+   # N1 < L
+   # N0 < L
+3. Sp, Rp := SqrtRem( N23 )
+   # Sp < H
+   # Rp <= 2*Sp < 2*H
+4. # equivalent to Q, U := DivRem( Rp*L + N1, 2*Sp )
+   # <==> Q*2*Sp + U == Rp*L + N1
+   # Q <= L (see research paper)
+   # U < 2*Sp
+    1. Qt, Ut := DivRem( Rp*L + N1, Sp )
+    # it        holds Qt * Sp   + Ut == Rp*L + N1
+    # it should hold  Q  * 2*Sp + U  == Rp*L + N1 (<= N)
+    2. Q := Qt // 2
+    # it holds if Qt is even, then 2*Q     == Qt
+    #          if Qt is odd , then 2*Q + 1 == Qt
+    # thus if Qt is even, then it holds
+    # Qt*Sp + Ut == 2*Q * Sp + Ut
+    #            == Q * 2*Sp + U with U := Ut
+    #            == Rp*L + N1
+    # thus if Qt is odd, then it holds
+    # Qt*Sp + Ut == (2*Q+1)*Sp + Ut
+    #            == 2*Q * Sp + Sp + Ut
+    #            == Q * 2*Sp + U with U := Ut + Sp
+    #            == Rp*L + N1
+    3. if Qt is odd, then U := Ut + Sp
+5. S := Sp*L + Q
+   # S < N == H*L
+6. Q_squared := Q^2
+7. R := (U*L + N0) - Q_squared
+8. if R < 0, then
+  1. R := R + 2*S
+  2. R := R - 1
+  3. S := S - 1
+9. return S, R
+
+===== Finer Mathematical Description of the Algorithm =====
+
+Note: A range has length x, if it consists of x limbs.
+      Each limb consists of WIDTH bits.
+
+Algorithm mpn_SqrtRem_impl( I ):
+Input: range I with length 2*n
+Preconditions:
+  1. thus the range I has an even length
+  2. I < N^2
+  3. I >= N^2/4
+Output:
+  - square root S (length n)
+  - square root remainder without its overflow bit Ro (length n)
+  - square root remainder overflow bit r
+Postconditions:
+  1. S^2 <= I
+  2. I < (S+1)^2
+  3. S^2 + r*N + Ro == I
+Implementaion: (# starts a comment)
+1. compute lengths
+    1. l := n // 2 # floor division, may not exact
+    2. h := n - l
+2. split the input range I into N23, N1 and N0,
+   such that I ==   N23 << 2*l*WIDTH # N23 has length 2*h, N23 < H^2,
+                                     # N23 >> 1 because of Precondition 1
+                  | N1  <<   l*WIDTH # N1  has length l  , N1  < L
+                  | N0               # N0  has length l  , N0  < L
+3. Sp, rp*L + Rpo := mpn_SqrtRem( N23 ) # not mpn_SqrtRem_impl()
+   # <==> Sp^2 + rp*L + Rpo == N23
+   # Sp  has length h, Sp < H
+   # Sp > 1, because N23 >> 1.
+   # Rpo has length h, Rpo < H
+   # Rp == rp*H + Rpo
+4. # equivalent of Q, U := DivRem( Rp*L + N1, 2*Sp )
+    1. # equivalent of Qt, Ut := DivRem( Rp*L + N1, Sp )
+       # <==> Qt*Sp + Ut == Rp*L + N1
+           # Suppose, we neglect the next subtraction:
+           # If rp == 1 <==> Rp >= H ,
+           # then Rpo == Rp - H
+           # and  Qt, Ut := DivRem(    Rpo  *L + N1, Sp )
+           # <==> Qt, Ut := DivRem( (Rp - H)*L + N1, Sp )
+           # <==> Qt*Sp + Ut == (Rp - H)*L + N1
+           #                 == Rp*L - H*L + N1
+           #                 == Rp*L + N1 - N ,
+           # which is not desired.
+           # How can we manipulate Rpo*L + N1,
+           # such that <manageable side effect> + Qt*Sp + Ut == <manipulated> ?
+           # Observe:
+           # If we add Sp*L, then Qt gets larger by L (manageable side effect).
+           # Observe:
+           # Because Rp <= 2*Sp == Sp + Sp and Sp < H
+           # ==> Rp < Sp + H <==> Rp - H < Sp
+           # ==> Rp - H - Sp == Rpo - Sp < 0 .
+           # With underflow (+H) Rpo - Sp is mathematical precisely Rp - H - Sp + H == Rp - Sp .
+           # Conclusion:
+           # If Rp > H <==> rp == 1, then we replace Rpo by Rpo - Sp.
+           # The +H by the underflow propagates a borrow bit to the left
+           # and – as a nice side effect – mathematical precisely cancels rp.
+           # Check of this Idea:
+           #      Qt, Ut := DivRem( (Rp - Sp)*L + N1, Sp )
+           # <==> Qt*Sp + Ut == (Rp - Sp)*L + N1
+           #                 == Rp*L - Sp*L + N1
+           # <==> (Qt + L)*Sp + Ut == Rp*L + N1
+        1. if rp > 0, then Rpo := Rpo - Sp
+           # mathematically precisely we also rp := 0
+           # Rpo*L + N1 has length h + l == n
+        2. qt*L + Qto, Ut := mpn_DivRem( Rpo*L + N1, Sp )
+           # Qto < L, because Qto has length l == n - h == (h + l) - h
+           # Ut < Sp ==> Ut < H, because Ut has length h (same as divisior Sp)
+           # if rp > 0, then mathematically precisely qt is bigger by 1.
+           # To reflect this in reality we, just add rp == 1 to it
+           # with the following addition.
+           # If rp == 0 <==> Rp == Rpo, then the addition is useless.
+        3. actual_qt := qt + rp
+           # Now memorize: Qt == actual_qt*L + Qto
+       # Not it holds Qt*Sp + Ut == Rp*L + N1
+       # <==> (actual_qt*L + Qto)*Sp + Ut == (rp*H + Rpo)*L + N1 .
+    2. # equivalent of Q := Qt // 2
+       #   <==> q*L + Qo := (actual_qt*L + Qto)
+        1. Qo := Qto >> 1
+           # Qo has length l as Qto has.
+        2. Qo[l-1] := ( (actual_qt & 1) << (WIDTH-1) ) | Qo[l-1]
+           # the least significant bit of actual_qt floats is also shifted right
+           # into the most significant bit of the last limb of Qo.
+           # Because Qo has length l, the last limb is at index l-1. (zero-based index)
+        3. q := qt >> 1 # memorize: q == 0 or 1 .
+       # Now memorize: Q == q*L + Qo
+    3. if Qt is odd, # Note: the old Qt (instead of the newer Q)
+           # equivalent of U := Ut + Sp
+        1. then u*H + Uo := Ut + Sp
+           # Remember: Ut has length h and Sp has length h .
+        2. else u := 0 ; Uo := Ut
+       # Uo has length h .
+# 5. omitted by intention, see later
+6. # equivalent of Q_squared := Q^2
+   # Recall Q <= L (see research paper)
+   # Thus either q == 0 or Qo == 0 (or both == 0, but never together != 0).
+   # Thus always q*Qo == 0 .
+   # Q^2 == (q*L + Qo)^2
+   #     == q*L^2 + 2*q*l*Qo + Qo^2
+   #     == q*L^2            + Qo^2
+   #     =: q*L^2 + Qo_squared
+   # See how q remains the same in Q^2 .
+   Qo_squared := mpn_sqr( Qo )
+   # Memorize: Q_squared == q*L^2 + Qo_squared
+   # Qo has length 2*l .
+7. # equivalent to R := (U*L + N0) - Q_squared
+   # <==> r*N + Ro := ((u*H + Uo)*L + N0) - q*L^2 - Qo_squared
+   #               == u*H*L - q*L^2 +  Uo*L + N0  - Qo_squared
+   #               == u*N   - q*L^2 + (Uo*L + N0) - Qo_squared
+   # Uo*L + N0 has length n == h + l .
+    1. main_borrow, Ro := mpn_sub_n( Uo*L + N0, Qo_squared, n)
+       # mpn_sub_n(X,Y,n) subtracts the n least significant limbs of X and Y.
+       # It leaves other limbs untouched. Thus a borrow is still returned.
+       # 
+       # If h == l, then Uo*L + N1 and Qo_squared have the same length,
+       # and the difference Ro has no place to store the main_borrow.
+       # But if h != l <==> h == l + 1 ,
+       # then Uo*L + N1 has one more limb than Qo_squared:
+       # Uo*L + N1 has length n = h + l == 1 + 2*l and
+       # Qo_squared has length 2*l .
+       # Thus the main_borrow must borrow from the last limb of the difference Ro.
+    2. if h == l , # <==> n is even
+        # r is has the meaning of a carry, but can be negative.
+        1. then
+            # Ro has a length of n == h + l == l + l == 2*l .
+            # Thus -q*L^2 left-shifts out of Ro as a borrow.
+            r = u - main_borrow - q
+        2. else
+            # else l + 1 == h <==> n is odd 
+            # and 2*l + 1 == n .
+            # Ro has a length of n == h + l == l + 1 + l == 2*l + 1 .
+            # Thus -q*L^2 goes into the last limb of Ro .
+            # The last limb of Ro is at index 2*l. (zero-based index)
+            1. temp_borrow, Ro[2*l] := Ro[2*l] - main_borrow - q
+            2. r := u - temp_borrow
+5. # equivalent of S := Sp*L + Q
+   # <==>        S := Sp*L + q*L + Qo
+   #   == s*N + So == (Sp + q)*L + Qo
+   # with S =: s*N + Soh*L + Qo
+   1. s*H + Soh = mpn_add_1( Sp, q )
+   2. So := Soh*L + Qo 
+   # We can only execute these statements after 4.3,
+   # because there Sp (and not Sp + q) is still needed.
+8. # equivalent of if R < 0
+   if r < 0, then
+    1. # equivalent of R := R + 2*S
+       # <==> r*N + Ro := r*N + Ro + 2*S
+        1. temp_carry*N + Ro := mpn_addmul_1( Ro, S, 2 )
+           # We assume, that writing the left-shifted version of S to a temporary location
+           # would not outperform the multiplications inside an addmul().
+        2. r += temp_carry
+    2. # equivalent of R := R - 1
+        1. temp_borrow, Ro := mpn_sub_1( Ro, 1 )
+        2. r -= temp_borrow
+    3. # equivalent of S := S - 1
+        1. temp_borrow, So := mpn_sub_1( So, 1 )
+        2. s -= temp_borrow
+9. # equivalent of return S, R
+  1. assert( s == 0 )
+  2. return S, ro, R
+     # resp. return So, ro*N + R

@@ -2309,160 +2309,319 @@ function mpn.idiv(dt, di, -- destination range
     -- end
 end
 
--- square root
---
--- We implement the recursive Karatsuba Square Root Algorithm by Paul Zimmermann
--- as described in the following two papers:
--- https://hal.inria.fr/inria-00072854/document
--- https://hal.inria.fr/inria-00072113/document 
--- 
--- Preconditions:
---     self:__is_valid()
--- Postconditions:
---     res:__is_valid()
-function mpn:__sqrt_abs_impl__OLD()
-    local c_n = self.n -- actually the dividend has one more limb
+--- integer square root with remainder
+---
+---@param st integer[] square root range array
+---@param si integer   square root range start index
+---@param t  integer[] source/remainder range array
+---@param i  integer   source/remainder range start index
+---@param e  integer   source           range end   index
+---
+---@nodiscard
+---@return integer se square root range end index
+---@return integer re remainder   range end index
+---
+--- range behavior:
+--- - overwrites `(t;i;e)` with the remainder `(t;i;re)`
+--- - overwrites `(st;si;se)` with the square root
+--- - Because the root remainder is at maximum the double of the integer root,
+---   it will be `se-si +1 >= re-i >= se-si`.
+function mpn.isqrt(
+        st, si,
+        t, i, e
+    )
     
-    if c_n == 1 then
-        -- msg.logf("base case self.n == 1")-- DEBUG
-        return { [0] = math.floor(math.sqrt( self[0] )) ; n = 1 }    
-    elseif c_n == 2 then
-        -- msg.logf("base case self.n == 2")-- DEBUG
-        return { [0] = math.floor(math.sqrt( (self[1] << WIDTH) | self[0] )) ; n = 1 }    
-    end
-    
-    -- New implementation of the spliting and normalization subroutine
-    -- The task is to split an Integer C into 3 parts:
-    --   - a higher part D2 consisting of the highest half of the limbs
-    --   - a lower middle part D1 consisiting of the second lowest quarter of the limbs
-    --   - a lower part D0 consisting of the first lowest quarter of the limbs
-    
-    -- compute padding, such that a padded C can be split in 4 quarters of equal length.
-    local r = c_n % 4
-    local p, d_n_m1 -- padding, d_n minus 1
-    if r == 0 then
-        p = 0 ; d_n_m1 = (c_n // 4) -1
-    else
-        p = 4 - r ; d_n_m1 = c_n // 4
-    end
-    msg.logf("p == %d, d_n_m1 == %d", p, d_n_m1)-- DEBUG
-    
-    -- pad D's with zero limbs
-    local D = { [0] = {} ; {} ; {} } -- D[0], D[1], D[2]
-    local i = 0 -- index over limbs of C
-    local j = 0 -- index over the limbs of D0, D1, D2 resp. Dk
-    local k = 0 -- index of the part, 0, 1, 2
-    local Dk = D[k] -- quarters D0 and D1, and the half D2
-    while i < p do
-        Dk[j] = 0
-        if j == d_n_m1 then
-            if k == 1 then
-                d_n_m1 = (d_n_m1 << 1) +1 -- to d_n_m1 add d_n 
-                msg.logf("d_n_m1 := %d (1)", d_n_m1)-- DEBUG
-            end
-            assert( k < 2 )-- DEBUG
-            j = 0
-            k = k +1 ; Dk = D[k]
-        else
-            j = j +1
-        end
-        i = i +1
-    end
-    
-    -- compute shift
-    local make_room_shift = Integer.__count_leading_zeros(self[c_n-1], WIDTH)
-    
-    i = 0
-    if make_room_shift == 0 or make_room_shift == 1 then
-        -- only coping
-        msg.logf("only coping, because make_room_shift == %d", make_room_shift)--DEBUG
-        repeat
-            Dk[j] = self[i]
-            if j == d_n_m1 then
-                if k == 1 then
-                    d_n_m1 = (d_n_m1 << 1) +1 -- to d_n_m1 add d_n 
-                    msg.logf("d_n_m1 := %d (2)", d_n_m1)
-                end
-                if k == 2 then
-                    break
-                else
-                    j = 0
-                end
-                k = k +1 ; Dk = D[k]
-            else
-                j = j +1
-            end
-            i = i +1
-        until false
-    else
-        -- coping and shifting
-        msg.logf("coping and shifting,"-- DEBUG
-               .." because make_room_shift == %d", make_room_shift)-- DEBUG
-        local crop_shift = WIDTH - make_room_shift
-        r = 0 -- remaining lower bits of lower significant neighboring limb
-        -- continue with current values of j, d_n_m1, k, Dk
-        repeat
-            Dk[j] = ((self[i] << make_room_shift) & MOD_MASK) | r
-            if j == d_n_m1 then
-                if k == 1 then
-                    d_n_m1 = (d_n_m1 << 1) +1 -- to d_n_m1 add d_n 
-                    msg.logf("d_n_m1 := %d (3)", d_n_m1)
-                end
-                if k == 2 then
-                    break
-                else
-                    j = 0
-                end
-                k = k +1 ; Dk = D[k]
-            else
-                j = j +1
-            end
-            r = (self[i] >> crop_shift) & MOD_MASK
-            i = i +1
-        until false
-    end
-    assert( i == (c_n - 1) )
-    -- BEGIN DEBUG
-    d_n_m1 = d_n_m1 >> 1
-    D[0].n = d_n_m1 + 1
-    D[1].n = d_n_m1 + 1
-    D[2].n = (d_n_m1 << 1) + 2
-    msg.logf("self.n == %d", c_n)
-    msg.logf("unnormalized argument self == %s", Integer.debug_string_bin(self) )
-    msg.logf("normalized second half D[2] == %s", Integer.debug_string_bin(D[2]) )
-    msg.logf("normalized second quarter D[1] == %s", Integer.debug_string_bin(D[1]) )
-    msg.logf("normalized first quarter D[0] == %s", Integer.debug_string_bin(D[0]) )
-    msg.logf("d_n == %d", d_n_m1 + 1 )
-    -- END DEBUG
-    assert( (4*(d_n_m1 + 1) % 2) == 0)-- DEBUG
-    assert( D[2][(d_n_m1 << 1) + 1] >= (RADIX // 4) )-- DEBUG
-    
-    -- initialize root and remainder
-    local S = {}
-    
-    return S
+    return 42, 42
 end
 
--- function mpn:__sqrt_abs_impl()
---     local mem
---     local clz = Integer.__count_of_leading_zeros(self[self.n], WIDTH)
---     if clz > 1 then
---         mem = Integer.lshift(self, )
---     else
---         mem = Integer.copy(self) 
---     end
--- end
-
-function mpn:__sqrt_abs()
-    if self.n < 1 then
-        return Integer.ZERO()
+--- wrapper to the implementation of the square root algorithm
+---
+--- The actual remainder will be `{t;i;i+n}` prefixed with the `rem_overflow_bit`.
+---
+---@param st integer[] square root range array
+---@param si integer   square root range start index
+---@param t  integer[] source/remainder range array
+---@param i  integer   source/remainder range start index
+---@param m  integer   source range **length**
+---
+---@nodiscard
+---@return integer rem_overflow_bit
+---
+--- range behavior:
+--- - overwrites `(t;i;e)` with the remainder `(t;i;re)`
+--- - overwrites `(st;si;se)` with the square root
+--- - Because the root remainder is at maximum the double of the integer root,
+---   it will be `se-si +1 >= re-i >= se-si`.
+function mpn.__isqrt_wrapper(
+        st, si, 
+        t, i, m
+    )
+    
+    -- CURRENTLTY THIS CODE IS ONLY A SKETCH.
+    
+    -- 1. left shift (t;i;e) in-place
+    --    to comply the precondition
+    
+    local shift = mpn.clz(t, i, e) -- count of necessary bit positions to left shift the input by
+    local n = m // 2 -- half length of input
+    if m % 1 == 1 then
+        shift = shift + WIDTH
+        n = n + 1
     end
-    local res = setmetatable(
-                    Integer.__sqrt_abs_impl(self),
-                    __Integer_meta)
-    res.s = false
-    --assert(res:__is_valid())-- DEBUG
-    return res
+    if shift > 0 then
+        e = mpn.lshift_many_unbounded(
+                t, i,
+                t, i, e,
+                shift,
+                mpn.lshift_few_bounded___leftward_impl)
+    end
+    return 42
+end
+
+--- implementation of the square root algorithm
+---
+--- The actual remainder will be `{t;i;i+n}` prefixed with the `rem_overflow_bit`.
+---
+---@param st integer[] square root range array
+---@param si integer   square root range start index
+---@param nt integer[] source/remainder range array
+---@param ni integer   source/remainder range start index
+---@param n  integer   half of the **even** length of the source range
+---
+---@nodiscard
+---@return integer rem_overflow_bit
+---
+--- **Preconditions:**
+--- - The length of the source/remainder range is even.
+--- - The most significant bit of the source/remainder range is set.
+---
+--- range behavior:
+--- - reads `(t;i;i+2*n)` as the source range
+--- - overwrites `(t;i;i+n)` with the remainder (`rem_overflow_bit` omitted)
+--- - overwrites `(st;si;si+n)` with the square root
+function mpn.__isqrt_impl(
+        st, si,
+        nt, ni, n
+    )
+    -- We implement the recursive Karatsuba Square Root Algorithm by Paul Zimmermann
+    -- as described in the following two papers:
+    -- https://hal.inria.fr/inria-00072854/document
+    -- https://hal.inria.fr/inria-00072113/document
+    
+    -- CURRENTLTY THIS CODE IS ONLY A SKETCH.
+    
+    -- The notation {table;main_start_index|offset;length} stands for a range
+    -- in table table
+    -- with the least significant limb at main_start_index + offset
+    -- and  the most  significant limb at main_start_index + offset + length -1
+    
+    -- assert, that most significant bit of the range is set
+    assert( mpn.__is_valid(t, i, i+2*n) )
+    assert( t[i+2*n-1] & (1 << (WIDTH-1)) == 1, "range is not normalized")
+    
+    -- 1. Basecase: direct computing with builtin
+    if n < 2 then
+        local radicand = (t[i+1] << WIDTH) | t[i]
+        local root = math.floor(math.sqrt(radicand))
+        local rem = radicand - root*root
+        assert( rem <= 2*root ) -- DEBUG
+        st[i] = root
+        t[i] = rem & MOD_MASK
+        return rem >> WIDTH
+    end
+    
+    -- variables:
+    -- m   ... length of input
+    --         - must be even
+    -- n   ... half length of input
+    -- l   ... length of the lower two quarters of input N1 and N0
+    -- h   ... half length of the higher half of input N23
+    --
+    -- N   ... radix correspondig to n
+    --         N := 2^(n*WIDTH)
+    -- L   ... radix corresponding to l
+    --         L := 2^(l*WIDTH)
+    -- H   ... radix corresponding to h
+    --         H := 2^(h*WIDTH)
+    --
+    -- N23 ... higher half of input (length 2*h)
+    -- N1  ... 2nd quarter of input (length l)
+    --         N1 < L
+    -- N0  ... 1st quarter of input (length l)
+    --         N1 < L
+    -- 
+    -- Sp  ... partial square root (length h)
+    --         Sp < H
+    -- Rpo ... partial square root remainder without its overflow bit rp (length h)
+    --         Rpo < H
+    -- Rp  ... partial square root remainder with    its overflow bit rp
+    --         Rp == rp*H + Rpo
+    --         Rp <= H
+    -- rp  ... partial square root remainder overflow bit
+    --
+    -- Qto ... preliminary quotient without its overflow bit qt (length l == n-l)
+    --         Qto < L
+    -- Qt  ... preliminary quotient with    its overflow bit qt
+    --         Qt == qt*L + Rpo
+    --         Qt <= L
+    -- qt  ... preliminary quotient overflow bit
+    -- Ut  ... preliminary division remainder (length l)
+    --         Ut < L
+    -- 
+    -- Qo ... quotient without its overflow bit q (length l)
+    --        Qo < L
+    -- Q  ... quotient with    its overflow bit q
+    --        Q == q*L + Qo
+    --        Q <= L
+    -- q  ... quotient overflow bit
+    -- Uo ... division remainder without its overflow bit (length h)
+    --        Uo < H
+    -- U  ... division remainder with    its overflow bit (length h)
+    --        U == u*H + Uo
+    --        U <= H
+    -- u  ... division remainder overflow bit
+    --
+    -- Rto ... preliminary square root remainder without its overflow bit rt (length n)
+    --         Rto < N
+    -- Rt  ... preliminary square root remainder with    its overflow bit rt
+    --         Rt == rt*N + Rto
+    --         Rt <= N
+    -- rt  ... preliminary square root remainder overflow bit
+    --
+    -- So ... square root without its temporary overflow bit s (length n)
+    --        S < N
+    -- S  ... square root with    its temporary overflow bit
+    --        S == s*N + So
+    --        temporary: S <= N
+    --        finally  : S <  N
+    -- s  ... square root temporary overflow bit
+    -- Ro ... square root remainder without its overflow bit r (length n)
+    --        Ro < N
+    -- R  ... square root remainder with    its overflow bit r
+    --        R == r*N + Ro
+    --        R <= N
+    -- r  ... square root remainder overflow bit
+    
+    -- important equalities
+    -- n is |    even    |        odd
+    -- -----|------------|–--------------------
+    -- (1)  |   l == n/2 |       l == n/2 - 0,5
+    -- (2)  | 2*l == n   | 2*l + 1 == n
+    -- (3)  |   h == n/2 |       h == n/2 + 0,5
+    -- (4)  | 2*h == n   |  2h - 1 == n
+    -- (5)  |      h + l == n
+    -- (6)  |  2*h + 2*l == 2*n == m
+    
+    local l = n // 2 -- length of 1st and 2nd quarter of input
+    local h = n - l -- length of higher half of input
+    
+    -- 3. recursively compute the partial square root Sp and the partial square root remainder Rp
+    --    of the higher half of the radicand N23
+    -- Sp, Rp = SqrtRem( N23 )
+    -- <==> Sp, rp*H + Rpo = SqrtRem( N23 )
+    local rp =
+            mpn.__isqrt_wrapper(-- partial root remainder Rpo into {nt;ni|2l;h}
+                st, si+l, -- partial square root Sp into {st;si|l;h}
+                nt, ni+2*l,  -- higher half of radicand N23 in {nt;ni|2l;2h}
+                h
+            )
+    
+    -- 3.2 correct the partial root remainder Rp
+    -- if Rp > H, then Rp := Rp - Sp
+    --                 <==> rp*H + Rp := rp*H + Rp - Sp
+    if rp > 0 then
+        mpn.sub(
+            -- TODO
+            -- partial root remainder Rpo into {nt;ni|2l;h}
+            -- partial root remainder Rpo in {nt;ni|2l;h}
+            -- partial square root Sp in {st;si|l;h}
+        )
+    end
+    
+    -- 4. divide the partial root remainder Rp and the 2nd quarter by the double of the partial square root
+    -- Q, U = DivRem( Rp*L + N1, Sp )
+    
+    -- 4.1 divide the partial root remainder Rp and the 2nd quarter N1 by the partial square root Sp
+    -- Qt, Ut = DivRem( Rp*L + N1, Sp )
+    local qt =
+            mpn.idivrem( -- preliminary division remainder Ut into {nt;ni|l;h}
+                st, si, -- preliminary quotient Qto into {st;si|0;l}
+                nt, ni+l, ni+l+n, -- partial root remainder Rpo in {nt;ni|2l;h} and the 2nd quarter N1 in {nt;ni|l;l} are together in {nt;ni|l,n}
+                st, si+l, si+l+h -- partial square root is in {st;si|l;h}
+            )
+    
+    -- 4.2 correct the preliminary division remainder (corresponds to dividing the preliminary quotient by 2)
+    -- if Qt is odd, then U = Ut + Sp
+    --                    <==> u*L + U = Ut + Sp
+    if st[si] & 1 == 1 then
+        local u =
+            mpn.add_bounded(
+                nt, ni+l, -- division remainder Uto into {nt;ni|l;h}
+                nt, ni+l, ni+l+h, -- preliminary division remainder Ut is in {nt;ni|l;h}
+                st, si+l, si+l+h, -- partial square root Sp is in {st;si|l;h}
+                0 -- left-incoming carry bit
+            )
+    end
+    
+    -- 4.3 divide the preliminary quotient by 2
+    -- Q = Qt // 2 
+    -- <==> (qt*L + Qto) >>= 1
+    mpn.rshift_few_bounded___rightward_impl(
+        st, si, -- quotient Qo into {st;si|0;l}
+        st, si, si+l, -- preliminary quotient Qto is in {st;si|0;l}
+        1, -- shift distance
+        0 -- left-incoming bits
+    )
+    st[si+l-1] = (qt << (WIDTH - 1)) | st[si+l-1] 
+    qt = qt >> 1
+    
+    
+    
+    -- Now the square root is (st;si;se), which is composed of
+    -- the partial square root in (st;l;se) and
+    -- the quotient in (st;si;l).
+    
+    -- 5. square the quotient
+    local sqr_quot_e
+    sqr_quot_e = mpn.sqr(
+                    t, re, -- squared quotient into (t;re;sqr_quot_e)
+                    st, si, l) -- quotient is in (st;si;l)
+    
+    -- 6. subtraction
+    local is_diff_neg
+    re, is_diff_neg = mpn.diff(
+                t, i, -- difference will be the root remainder into (t;i;re)
+                t, i, divrem_e, -- subtrahend is the division remainder in (t;l;divrem_e) and the 1st quarter in (t;i;l)
+                t, re, sqr_quot_e, -- minuend is the squared quotient in (t;re;sqr_quot_e)
+                0)
+    
+    -- 7. correction
+    if is_diff_neg then
+        -- 7.1 double the square root into a temporary
+        dbl_sqrt_e = mpn.lshift_few_unbounded(
+                dbl_sqrt_t, 0, -- doubled square root into (dbl_sqrt_t;0;dbl_sqrt_e)
+                st, si, se,
+                1, 0,
+                mpn.rshift_few_bounded___rightward_impl)
+        -- 7.2 to the root remainder add the doubled square root
+        re = mpn.add_unbounded(
+                    t, i, 
+                    t, i, re,
+                    dbl_sqrt_t, 0, dbl_sqrt_e,
+                    0)
+        -- 7.3 subtract one from the root remainder
+        re = mpn.sub_word(
+                    t, i,
+                    t, i, re,
+                    1)
+        -- 7.4 subtract one from the square root
+        se = mpn.sub_word(
+                    st, si,
+                    st, si, se,
+                    1)
+    end
+    
+    return se, re
 end
 
 local DIGITS_UPPERCASE = {
