@@ -308,7 +308,7 @@ Algorithm:
             - <span style="color:orange">1. $U := U_t$</span>
 - <span style="color:orange">4.</span> $R_t := U L + X_0 - Q^2$
     - <span style="color:orange">1. $Q_{sqr} := Q^2$</span>
-    - <span style="color:orange">2. $R := (UL + X_0) - Q_{sqr}$</span>
+    - <span style="color:orange">2. $R_t := (UL + X_0) - Q_{sqr}$</span>
 - <span style="color:orange">5.</span> $S_t := S L + Q$
     - <span style="color:orange">1. $S_t := S_p L + Q$</span>
     - it holds $S < N$ with $N = HL$
@@ -317,8 +317,7 @@ Algorithm:
         - <span style="color:orange">1.</span> $R := R_t + 2S_t - 1$
             - <span style="color:orange">1. $R_{tt} := R_t + 2S_t$</span>
             - <span style="color:orange">2. $R := R_{tt} - 1$</span>
-        - <span style="color:orange">2.</span> $S := S_t - 1$
-            - <span style="color:orange">1. $S := S_t - 1$</span>
+        - <span style="color:orange">2. $S := S_t - 1$</span>
     - <span style="color:orange">2. else</span>
         - if $R_t \ge 0$
         - <span style="color:orange">1. $R := R_t$</span>
@@ -480,7 +479,7 @@ Algorithm:
           $:= (uH + U_o)L + X_0 - qL^2 - Q_{o,sqr}$<br>
           $= uHL - qL^2 +  U_oL + X_0    - Q_{o,sqr}$<br>
           $= uN  - qL^2 + (U_oL + X_0)   - Q_{o,sqr}$
-        - <span style="color:orange">1. $main\_borrow\cdot B^{2l} + R_{to} := mpn\_sub\_n( U_oL + X_0, Q_{o,sqr}, 2l)$</span>
+        - <span style="color:orange">1. $main\_borrow, R_{to} := mpn\_sub\_n( U_oL + X_0, Q_{o,sqr}, 2l)$</span>
             - $mpn\_sub\_n(X,Y,n)$ subtracts the $n$ least significant limbs of $X$ and $Y$.
             - It leaves other limbs untouched. Thus a borrow is still returned.
         - If $h = l \iff n\ \text{is even}$, then $U_oL+X_1$ and $Q_{o,sqr}$ have the same length:
@@ -506,29 +505,36 @@ Algorithm:
                 - $R_{to}$ has a length of $n = h + l = l + 1 + l = 2l + 1$ .
                 - Thus $-qL^2$ goes into the last limb of $R_{to}$ .
                 - The last limb of $R_{to}$ is at index $2l$. (zero-based index)
-                - <span style="color:orange">1. $temp\_borrow\cdot B + R_{to}[2l] := R_{to}[2l] - main\_borrow - q$</span>
+                - <span style="color:orange">1. $temp\_borrow, R_{to}[2l] := R_{to}[2l] - main\_borrow - q$</span>
                 - <span style="color:orange">2. $r_t := u - temp\_borrow$</span>
+            - Now if $r_t$ is negative, then this stands therefore, that $UL + X_o - Q^2$ is negative. 
 - <span style="color:orange">5.</span> $S_t := S L + Q$
     - <span style="color:orange">1.</span> $S_t := S_p L + Q$
         - $\iff S_t := S_pL + qL + Q_o$<br>
           $= s_tN + S_{to} := (S_p + q)L + Q_o$<br>
           with $S_t =: s_tN + S_{to,high}L + Q_o = s_tN + S_{to}$
-        - <span style="color:orange">1. $sH + S_{o,high} := S_p +q$</span>
-            - $S_{o,high}$ as length $h$, because $S_o$ has length $h$ .
-        - <span style="color:orange">2. $S_{to} := S_{o,high}L + Q_o$ </span>
-            - $S_{to}$ as length $n = h + l$, because $S_{o,high}$ has length $h$ and $Q_o$ has length $l$.
+        - <span style="color:orange">1. $s_tH + S_{to,high} := S_p +q$</span>
+            - $S_{o,high}$ as length $h$, because $S_p$ has length $h$ .
+        - <span style="color:orange">2. $S_{to} := S_{to,high}L + Q_o$ </span>
+            - $S_{to}$ as length $n = h + l$, because $S_{to,high}$ has length $h$ and $Q_o$ has length $l$.
     - We can only execute these statements after 3.2. , because until including 3.2. <br>
       $S_p$ (and not $S_p + q$) is still needed
       and $S_p$ is stored at memory which will become $S_{to}$ here.
 - TODO
 - <span style="color:orange">6.</span> correct return values:
     - 1\. if $R_t < 0$ then
-    - <span style="color:orange">1. if $r_t < 0$ then</span>
-        - <span style="color:orange">1.</span> $R := R_t + 2S_t - 1$
-            - <span style="color:orange">1. $R_{tt} := R_t + 2S_t$</span>
-            - <span style="color:orange">2. $R := R_{tt} - 1$</span>
-        - <span style="color:orange">2.</span> $S := S_t - 1$
-            - <span style="color:orange">1. $S := S_t - 1$</span>
+        - <span style="color:orange">1. if $r_t < 0$ then</span>
+            - <span style="color:orange">1.</span> $R := R_t + 2S_t - 1$
+                - <span style="color:orange">1.</span> $R_{tt} := R_t + 2S_t$
+                    - $= r_t N + R_{to} + 2(s_t N + S_{to})$<br>
+                      $= (r_t + 2s_t)N + R_{to} + 2S_{to}$
+                    - <span style="color:orange">1. $r_{tto}' N + R_{tto} := R_{to} + 2S_{to}$</span>
+                    - <span style="color:orange">2. $r_{tto} := r_{tto}' + 2s_t$</span>
+                - <span style="color:orange">2.</span> $R := R_{tt} - 1$
+                    - $= r_{tt} N + R_{tto} -1$
+                    - <span style="color:orange">1. $temp\_borrow, R_o := R_{tto} -1$</span>
+                    - <span style="color:orange">2. $r := r_{tto} - temp\_borrow$</span>
+            - <span style="color:orange">2.$S := S_t - 1$</span>
     - <span style="color:orange">2. else</span>
         - if $R_t \ge 0$
         - <span style="color:orange">1. $R := R_t$</span>
