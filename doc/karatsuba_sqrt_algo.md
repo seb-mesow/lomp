@@ -33,7 +33,7 @@ as described in the following two papers:
 
 | Symbol | Explanation | Notes |
 | :---:  | :---        | :---  |
-| $b$    | `WIDTH`     | must be even |
+| $b$    | `WIDTH`     | **must be even !** |
 | $B$    | `RADIX`     | $B = 2^b$ |
 
 ### Normalizing the Input $X_u$
@@ -48,16 +48,16 @@ as described in the following two papers:
 
 $$ B^{m_u} \stackrel{!}{>} X_u \stackrel{!}{\ge} B^{m_u-1} \iff B > X_u[m_u-1] \stackrel{!}{\ge} 1$$
 
-Thus $X$ must not have any leading zero limbs resp. in the most significant limb at least one bit must be set.
+Thus $X_u$ must not have any leading zero limbs resp. in the most significant limb at least one bit must be set.
 
 ### Splitting the Normalized Input $X$
 
 | Symbol | Explanation        | Notes |
 | :---:  | :---               | :---  |
-| $m$ | length of normalized input      | must be even |
+| $m$ | length of normalized input      | **must be even !** |
 | $n$ | half length of normalized input | |
-| $l$ | length of the lower two quarters of the normalized input $N_1$ and $N_0$ ||
-| $h$ | "half" length of the higher half of input $N_{23}$ | |
+| $l$ | length of the lower two quarters of the normalized input $X_1$ and $X_0$ ||
+| $h$ | "half" length of the higher half of input $X_{23}$ | |
 
 | $n$ is |    even            |        odd          |
 | :---:  | :---:              | :---:               |
@@ -91,9 +91,15 @@ $$ X = X_{23}L^2 + X_1L + X_0 $$
 
 #### Normalization Precondition
 
-$$ B^{2n} \stackrel{!}{>} X_u \stackrel{!}{\ge} \frac{B^{2n}}{4} \iff 2^{2nb} > X_u[m_u-1] \stackrel{!}{\ge} 2^{2nb-2}$$
+$$\begin{array}{rc}
+     & B^{2n} \stackrel{!}{>} X \stackrel{!}{\ge} \frac{B^{2n}}{4}\\
+\iff & 2^{2nb} \stackrel{!}{>} X \stackrel{!}{\ge} 2^{2nb-2}\\
+\iff & 2^{(2n-1)b+b} \stackrel{!}{>} XB^{2n-1} \stackrel{!}{\ge} 2^{(2n-1)b+b-2}\\
+\iff & 2^{(2n-1)b}\cdot 2^b \stackrel{!}{>} X[2n-1]\cdot 2^{2n-1}+\ldots \stackrel{!}{\ge} 2^{(2n-1)b}\cdot 2^{b-2}\\
+\iff & 2^{b} > X[2n-1] \stackrel{!}{\ge} 2^{b-2}
+\end{array}$$
 
-Thus $X_u$ must fulfil the minimization and the most and/or second most significant bit must be set.
+Thus $X_u$ must fulfil the minimization condtion and the most and/or second most significant bit must be set.
 
 ### Recursive Call of $SqrtRem\_Impl()$
 
@@ -166,40 +172,67 @@ All normal-colored text are comments
 
 **Algorithm $SqrtRem\_Wrap()$**
 
-Input: 
+Syntax: $S_0, R_0 := SqrtRem\_Wrap(X_u)$
+
+Input:
+- radicand $N_0$
+
+Preconditions:
+1. $X_0 \ge 0$
+
+Output:
+- integer square root $S_0$
+- integer square root remainder $R_0$
+
+Postcondtions:
+1. truncated square root conditions
+    - 1\. $S_0^2 \le N_0$
+    - 2\. $N_0 < (S_0+1)^2$
+2. square root remainder condition $S_0^2 + R_0 = N_0$
+- $\text{1.} \land \text{2.} \implies$
+    - $0 \le r_0 B^{m_0} + R_0$
+    - $r_0 B^{m_0} + R_0 \le 2S_0$
+
+Algorithm:
+
 
 ### 3rd-level Pseudo Code
 
-Syntax: $S, r, R_o := mpn\_SqrtRem\_Wrap(X, m)$
+Syntax: $S, rB^{m_0} + R_o := mpn\_SqrtRem\_Wrap(N_0, m_0)$
 
 Input:
-- input number $X$
-- its length $m_u$
+- radicand $N_0$
+- radicant length $m_0$
 
 Preconditions:
-1. $m_u$ is the minimal length of $X$
-    - 1\. $X \ge B^{m_u-1}$
-    - 2\. $X < B^{m_u}$
+1. $m_0$ is the minimal length of $N_0$
+    - 1\. $N_0 \ge B^{m_u-1}$
+    - 2\. $N_0 < B^{m_u}$
 
 Output:
-- square root $S$
-    - will have length $$
-- square root remainder without its overflow bit $R_o$
-    - TODO length
-- square root remainder overflow bit $r$
+- integer square root $S_0$
+    - will have length $m_{c02} := \lceil\frac{m_0}{2}\rceil$
+- integer square root remainder without its overflow bit $R_{0o}$
+    - will have length $m_0$
+- square root remainder overflow bit $r_0$
 
 Postconditions:
-- with $m_h =\lceil\frac{m_u}{2}\rceil$
-1. integer square root condition:
-    - 1\. $S^2 \le X$
-    - 2\. $(S+1)^2 > X$
-2. remainder condition: $S^2 + rB^{m_h} + R_o = X$
-3. $S$ has length $m_h$
-    - 1\. $S \ge 0$ 
-    - 2\. $S < B^{m_h}$ 
-4. $R_o$ has length $m_h$
-    - 1\. $R_o \ge 0$ 
-    - 2\. $R_o < B^{m_h}$ 
+1. truncated square root conditions
+    1. $S_0^2 \le N_0$
+    2. $N_0 < (S_0+1)^2$
+2. square root remainder condition $S_0^2 + r_0 B^{m_0} + R_0 = N_0$
+- $\text{1.} \land \text{2.} \implies$
+    - $0 \le r_0 B^{m_0} + R_0$
+    - $r_0 B^{m_0} + R_0 \le 2S_0$
+3. $S_0$ has length $m_{c02}$ (may not minimal length)
+    - 1\. $S_0 \ge 0$ 
+    - 2\. $S_0 < B^{m_{c02}}$ 
+4. $R_0$ has length $m_{c02}$ (may not minimal length)
+    - 1\. $R_0 \ge 0$ 
+    - 2\. $R_0 < B^{m_{c02}}$ 
+
+Algorithm:
+
 
 ## Implementation Function
 

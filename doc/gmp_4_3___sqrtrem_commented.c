@@ -93,7 +93,7 @@ static const unsigned short invsqrttab[384] =
 /* Compute s = floor(sqrt(a0)), and *rp = a0 - s^2.  */
 
 #if GMP_NUMB_BITS > 32
-    #define MAGIC 0x10000000000	// 0xffe7debbfc < MAGIC < 0x232b1850f410
+    #define MAGIC 0x10000000000 // 0xffe7debbfc < MAGIC < 0x232b1850f410
 #else
     #define MAGIC 0x100000      // 0xfee6f < MAGIC < 0x29cbc8
 #endif
@@ -258,17 +258,18 @@ mpn_dc_sqrtrem (mp_ptr sp, mp_ptr np, mp_size_t n)
 
 /*  wrapper function
     
-    Compute the square root of {sp, nn}
-    and put the result at {r1p, ceil(nn/2)}
-    and the remainder at {r2p, retval}.
+    Compute from the radicand {np, nn}
+    the square root at {sp, ceil(nn/2)}
+    and the remainder at {rp, retval}.
     
-    r2p needs space for n limbs, but the return value indicates how many are produced.
+    rp needs space for nn limbs, but the return value indicates how many are produced.
     
-    The most significant limb of {sp, n} must be non-zero.
-    The areas {r1p, ceil(n/2)} and {sp, n} must be completely separate.
-    The areas {r2p, n} and {sp, n} must be either identical or completely separate.
+    Precondtions:
+    1. The most significant limb of {np, nn} must be non-zero.
+    2. The areas {sp, ceil(nn/2)} and {np, n} must be completely separate.
+    3. The areas {rp, nn} and {np, nn} must be either identical or completely separate.
     
-    If the remainder is not wanted then r2p can be NULL,
+    If the remainder is not wanted then rp can be NULL,
     and in this case the return value is zero or non-zero according to whether the remainder would have been zero or non-zero.
     
     A return value of zero indicates a perfect square. See also mpn_perfect_square_p. 
@@ -276,7 +277,9 @@ mpn_dc_sqrtrem (mp_ptr sp, mp_ptr np, mp_size_t n)
 mp_size_t
 mpn_sqrtrem (mp_ptr sp, mp_ptr rp, mp_srcptr np, mp_size_t nn)
 {
-    mp_limb_t *tp, s0[1], cc, high, rl;
+    mp_limb_t *tp;
+    mp_limb_t s0[1];
+    mp_limb_t cc, high, rl;
     int c;
     mp_size_t rn, tn;
     TMP_DECL;
@@ -284,15 +287,15 @@ mpn_sqrtrem (mp_ptr sp, mp_ptr rp, mp_srcptr np, mp_size_t nn)
     ASSERT (nn >= 0);
     ASSERT_MPN (np, nn);
     
-    /* If OP is zero, both results are zero.  */
+    // If OP is zero, both results are zero.
     if (nn == 0) {
         return 0;
     }
     
-    ASSERT (np[nn - 1] != 0);
-    ASSERT (rp == NULL || MPN_SAME_OR_SEPARATE_P (np, rp, nn));
-    ASSERT (rp == NULL || ! MPN_OVERLAP_P (sp, (nn + 1) / 2, rp, nn));
-    ASSERT (! MPN_OVERLAP_P (sp, (nn + 1) / 2, np, nn));
+    ASSERT (np[nn - 1] != 0); // 1. Precondition
+    ASSERT (rp == NULL || MPN_SAME_OR_SEPARATE_P (np, rp, nn)); // 3. Precondition
+    ASSERT (rp == NULL || ! MPN_OVERLAP_P (sp, (nn + 1)/2, rp, nn)); // another Preconditon
+    ASSERT (! MPN_OVERLAP_P (sp, (nn + 1)/2, np, nn)); // 2. Precondition
     
     high = np[nn - 1];
     if (nn == 1 && (high & GMP_NUMB_HIGHBIT)) {
@@ -306,24 +309,26 @@ mpn_sqrtrem (mp_ptr sp, mp_ptr rp, mp_srcptr np, mp_size_t nn)
     count_leading_zeros (c, high);
     c -= GMP_NAIL_BITS;
     
-    c = c / 2; /* we have to shift left by 2c bits to normalize {np, nn} */
-    tn = (nn + 1) / 2; /* 2*tn is the smallest even integer >= nn */
+    c = c / 2; // we have to shift left by 2c bits to normalize {np, nn}
+    tn = (nn + 1) / 2; // 2*tn is the smallest even integer >= nn
     
     TMP_MARK;
     if (nn % 2 != 0 || c > 0) {
         tp = TMP_ALLOC_LIMBS (2 * tn);
-        tp[0] = 0;	     /* needed only when 2*tn > nn, but saves a test */
+        tp[0] = 0;    // needed only when 2*tn > nn, but saves a test
         if (c != 0)
             mpn_lshift (tp + 2 * tn - nn, np, nn, 2 * c);
         } else {
             MPN_COPY (tp + 2 * tn - nn, np, nn);
         }
         rl = mpn_dc_sqrtrem (sp, tp, tn);
-        /* We have 2^(2k)*N = S^2 + R where k = c + (2tn-nn)*GMP_NUMB_BITS/2,
-             thus 2^(2k)*N = (S-s0)^2 + 2*S*s0 - s0^2 + R where s0=S mod 2^k */
-        c += (nn % 2) * GMP_NUMB_BITS / 2;		// c now represents k
-        s0[0] = sp[0] & (((mp_limb_t) 1 << c) - 1);	// S mod 2^k
-        rl += mpn_addmul_1 (tp, sp, tn, 2 * s0[0]);	// R = R + 2*s0*S
+        
+        /*  We have 2^(2k)*N = S^2 + R where k = c + (2tn-nn)*GMP_NUMB_BITS/2,
+            thus 2^(2k)*N = (S-s0)^2 + 2*S*s0 - s0^2 + R where s0=S mod 2^k
+        */
+        c += (nn % 2) * GMP_NUMB_BITS / 2;          // c now represents k
+        s0[0] = sp[0] & (((mp_limb_t) 1 << c) - 1); // S mod 2^k
+        rl += mpn_addmul_1 (tp, sp, tn, 2 * s0[0]); // R = R + 2*s0*S
         cc = mpn_submul_1 (tp, s0, 1, s0[0]);
         rl -= (tn > 1) ? mpn_sub_1 (tp + 1, tp + 1, tn - 1, cc) : cc;
         mpn_rshift (sp, sp, tn, c);
