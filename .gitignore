@@ -39,3 +39,9 @@ luac.out
 *.x86_64
 *.hex
 
+# LaTeX
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz

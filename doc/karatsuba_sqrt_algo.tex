@@ -1,0 +1,759 @@
+% !TeX spellcheck = en_US
+\documentclass[%
+    a4paper,%
+    %twocolumn%
+]{article}
+
+\parindent0pt\relax
+\parskip1em\relax
+
+\usepackage[%
+    left=1cm,%
+    right=1cm,%
+    top=0mm,%
+    bottom=0mm%
+]{geometry}
+
+% TODO pagenumbers
+
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{etoolbox}
+
+\makeatletter
+
+\setlist{%
+    itemsep=0pt,%
+    parsep=0pt,%
+    topsep=0pt,%
+    partopsep=0pt,%
+}
+\setlist[itemize]{%
+    label={\normalfont\bfseries\textendash},%
+    labelwidth=.6em,%
+    leftmargin=!%
+}
+\setlist[enumerate]{%
+    label*={\arabic*.},%
+%    labelwidth=1em,%
+%    leftmargin=!%
+}
+%\setlist[enumerate,1]{%
+%    label*={\arabic*.},%
+%    labelwidth=1.5em,%
+%    leftmargin=!%
+%}
+
+%\newcommand*\actualCmd{\textcolor{red}}
+
+\DeclareMathOperator\DivRem{\texttt{DivRem}}
+\DeclareMathOperator\SqrtRemWrap{\texttt{SqrtRem\_Wrap}}
+\DeclareMathOperator\SqrtRemImpl{\texttt{SqrtRem\_Impl}}
+\DeclareMathOperator\mpnDivRem{\texttt{mpn\_DivRem}}
+\DeclareMathOperator\mpnSqrtRemImpl{\texttt{mpn\_SqrtRem\_Impl}}
+\DeclareMathOperator\mpnSubN{\texttt{mpn\_sub\_n}}
+
+% bit operators
+\DeclareRobustCommand*\shl {\mathbin{\texttt{>>}}}
+\DeclareRobustCommand*\shr {\mathbin{\texttt{<<}}}
+\DeclareRobustCommand*\band{\mathbin{\texttt{\&}}}
+\DeclareRobustCommand*\bor {\mathbin{\texttt{|}}}
+
+\newenvironment*{algo}{% begdef
+    %\newcommand*\algo@functionName{#1}%
+    \newcommand*\algo@noNextParskip{%
+        \vspace{-\parskip}%
+    }%
+    \newcommand*\algo@section{\textbf}%
+    \newcommand*\Syntax{%
+        \algo@section{Syntax:} % note the space
+    }%
+    \newcommand*\Input{%
+        \algo@section{Input:}%
+        \algo@noNextParskip%
+    }%
+    \newcommand*\PreConditions{%
+        \algo@section{Preconditions:}%
+        \algo@noNextParskip%
+    }%
+    \newcommand*\Output{%
+        \algo@section{Output:}%
+        \algo@noNextParskip%
+    }%
+    \newcommand*\PostConditions{%
+        \algo@section{Postconditions:}%
+        \algo@noNextParskip%
+    }%
+    \newcommand*\DeducedPostConditions{%
+        \algo@section{Deduced Postconditions:}%
+        \algo@noNextParskip%
+    }%
+    \newcommand*\Algorithm{%
+        \algo@section{Algorithm:}%
+        \algo@noNextParskip%
+    }%
+}{% enddef
+}
+
+\newcount\pseudocode@stepLevel
+\newcounter{pseudocode@step@n}
+\newcounter{pseudocode@step@i}[pseudocode@step@n]
+\newcounter{pseudocode@step@ii}[pseudocode@step@i]
+\newcounter{pseudocode@step@iii}[pseudocode@step@ii]
+\newcounter{pseudocode@step@iv}[pseudocode@step@iii]
+\newcounter{pseudocode@step@v}[pseudocode@step@iv]
+
+\renewcommand*\thepseudocode@step@n                         {\arabic{pseudocode@step@n}.}
+\renewcommand*\thepseudocode@step@i  {\thepseudocode@step@n  \arabic{pseudocode@step@i}.}
+\renewcommand*\thepseudocode@step@ii {\thepseudocode@step@i  \arabic{pseudocode@step@ii}.}
+\renewcommand*\thepseudocode@step@iii{\thepseudocode@step@ii \arabic{pseudocode@step@iii}.}
+\renewcommand*\thepseudocode@step@iv {\thepseudocode@step@iii\arabic{pseudocode@step@iv}.}
+\renewcommand*\thepseudocode@step@v  {\thepseudocode@step@iv \arabic{pseudocode@step@v}.}
+
+\def\pseudocode@intToRoman#1{%
+    \ifcase#1n%
+    \or i%
+    \or ii%
+    \or iii%
+    \or iv%
+    \else v%
+    \fi%
+}
+
+% TODO box for label and automatic left intendion
+\newbox\pseudocode@labelBox
+\newlength\pseudocode@intend
+\setlength\pseudocode@intend{1em}
+
+\newenvironment{pseudocode}
+{% begdef
+    \setcounter{pseudocode@step@n}{0}%
+    % ##1 - indention, starting with 0
+    % ##2 - statement
+    % ##3 - comments on this statement
+    \newcommand\statement[3]{%
+        \midrule%
+        \pseudocode@stepLevel##1\relax%
+        \edef\pseudocode@stepLevel@roman{\pseudocode@intToRoman\pseudocode@stepLevel}%
+        \refstepcounter{pseudocode@step@\pseudocode@stepLevel@roman}%
+        \setbox\pseudocode@labelBox\hbox{%
+            \csname thepseudocode@step@\pseudocode@stepLevel@roman\endcsname%
+            \space%
+        }%
+        \leftskip\dimexpr\pseudocode@stepLevel\pseudocode@intend+\wd\pseudocode@labelBox\relax%
+        \llap{\box\pseudocode@labelBox}%
+        ##2
+        &%
+        ##3
+        \tabularnewline%
+    }%
+    % ##1 - comments
+    \newcommand\comment[1]{%
+        \midrule%
+        &%
+        ##1%
+        \tabularnewline%
+    }%
+    \begin{longtable}{%
+        @{}%
+            >{\raggedright\parskip1em\relax\let\\\newline}%
+        p{.4\linewidth}%
+            >{\raggedright\parskip1em\relax\let\\\newline}%
+        p{\dimexpr.6\linewidth-2\tabcolsep\relax}%
+        @{}%
+    }%
+    \toprule%
+    \centering\bfseries Statement&\centering\bfseries Comment\tabularnewline%
+    \endfirsthead%
+%    \toprule%
+%    \centering\bfseries Statement&\centering\bfseries Comment\tabularnewline%
+    \midrule%
+    \endhead%
+}{% enddef
+    \bottomrule%
+    \end{longtable}%
+}
+
+\makeatother
+
+\begin{document}
+
+\title{Karatsuba Square Root Algorithm in Detail}
+
+\author{Sebastian Mesow}
+
+\maketitle
+
+We implement the recursive Karatsuba Square Root Algorithm by Paul Zimmermann
+as described in the following two papers:
+
+1. https://hal.inria.fr/inria-00072854/document\\
+2. https://hal.inria.fr/inria-00072113/document
+
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+\begin{itemize}[topsep=-\parskip]
+\item Hello Hello Hello Hello Hello
+\item Hello Hello Hello Hello Hello
+\item Hello Hello Hello Hello Hello
+\end{itemize}
+\vskip\parskip
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello
+
+
+\section{Implementation Function}
+
+\subsection{1st-level Pseudo Code}
+
+\begin{algo}
+\Syntax $S, R := \SqrtRemImpl(X)$
+
+\Input
+\begin{enumerate}
+\item normalized input integer $X$
+\end{enumerate}
+
+\PreConditions
+\begin{enumerate}
+\item Normalization Condition
+    \begin{itemize}
+    \item with $m$ the minimal length of $X$
+    \end{itemize}
+    \begin{enumerate}
+    \item $X \ge \frac{B^m}{4}$
+    \item $X < B^m$
+    \end{enumerate}
+\end{enumerate}
+
+\Output
+\begin{enumerate}
+\item square root $S$
+\item square root remainder $R$
+\end{enumerate}
+
+\PostConditions
+\begin{enumerate}
+\item Integer Square Root Condition:
+    \begin{enumerate}
+    \item $S^2 \le X$
+    \item $(S+1)^2 > X$
+    \end{enumerate}
+\item Integer Square Root Remainder Condition: $S^2 + R = X$
+\end{enumerate}
+
+\DeducedPostConditions
+\begin{enumerate}
+\item Upper Bound for Square Root:
+    \begin{itemize}
+    \item $S^2\le X \land X<B^m \implies S^2<B^m$ is equivalent to
+    \end{itemize}
+    \begin{enumerate}
+    \item $S<B^{\frac{m}{2}}$
+    \end{enumerate}
+\item Upper Bounds for Square Root Remainder
+    \begin{itemize}
+    \item $(S+1)^2>X \iff S^2+2S+1>X \iff 2S+1>X-S^2 \iff 2S\ge X-S^2$
+    \item and $S^2+R=X \iff R=X-S^2$ implies
+    \end{itemize}
+    \begin{enumerate}
+    \item $R\le 2S$
+    \end{enumerate}
+    \begin{itemize}
+    \item $R\le2S \land S<B^{\frac{m}{2}}$ implies
+    \end{itemize}
+    \begin{enumerate}[resume]
+    \item $R<2B^{\frac{m}{2}}$
+    \end{enumerate}
+\end{enumerate}
+
+\Algorithm
+\begin{pseudocode}
+\statement{0}{compute $H,L$ such that}{}
+\statement{1}{$HL = N$}{}
+\statement{1}{$H \ge L$}{}
+\statement{1}{$X = X_{23}L^2 + X_1L+ X_0$}{}
+\statement{0}{$S_p, R_p := \SqrtRemWrap(X_{23})$}{}
+\statement{0}{$Q, U := \DivRem(R_p L+X_1, 2S_p)$}{}
+\statement{0}{$R_t := U L + X_0 - Q^2$}{}
+\statement{0}{$S_t := S_p L + Q$}{}
+\statement{0}{}{correct return values}
+\statement{1}{if $R_t < 0$ then}{}
+\statement{2}{$R := R_t + 2S_t - 1$}{}
+\statement{2}{$S := S_t - 1$}{}
+\statement{1}{else}{if $R_t \ge 0$}
+\statement{2}{$R := R_t$}{}
+\statement{2}{$S := S_t$}{}
+\end{pseudocode}
+\end{algo}
+
+\subsection{2nd-level Pseudo Code}
+
+\begin{algo}
+\Syntax $S, R := \SqrtRemImpl(X)$
+
+\Input
+\begin{enumerate}
+\item normalized input number $X$
+\end{enumerate}
+
+\PreConditions
+\begin{enumerate}
+\item Normalization Condition
+    \begin{itemize}
+    \item with $m$ the minimal length of $X$
+    \end{itemize}
+    \begin{enumerate}
+    \item $X \ge \frac{B^m}{4}$
+    \item $X < B^m$
+    \end{enumerate}
+\end{enumerate}
+
+\Output
+\begin{enumerate}
+\item square root $S$
+\item square root remaninder $R$
+\end{enumerate}
+
+\PostConditions
+\begin{enumerate}
+\item Integer Square Root Condition:
+    \begin{enumerate}
+    \item $S^2 \le X$
+    \item $(S+1)^2 > X$
+    \end{enumerate}
+\item Integer Square Root Remainder Condition: $S^2 + R = X$
+\end{enumerate}
+
+\Algorithm
+\begin{pseudocode}
+\statement{0}{compute $H,L$ such that}{}
+\statement{1}{$HL = N$}{}
+\statement{1}{$H \ge L$}{}
+\statement{1}{$X = X_{23}L^2 + X_1L+ X_0$}{}
+\statement{0}{$S_p, R_p := \SqrtRemWrap(X_{23})$}{}
+\statement{0}{}{$Q, U := \DivRem(R_p L+X_1, 2S_p)$}
+\comment{%
+    it holds $R_pL + X_1 = Q\cdot 2S_p + U$\\
+    it holds $Q < L$ (see research paper)\\
+    it holds $U < 2S_p$
+}
+\statement{1}{$Q_t, U_t := \DivRem(R_p L + X_1, S_p)$}{}
+\comment{it holds $R_pL+X_1 = Q_tS_p + U_t$}
+\comment{it must will hold $R_p L + X_1 \stackrel{!}{=} Q\cdot 2S_p + U$}
+\statement{1}{$Q := \lfloor\frac{Q_t}{2}\rfloor$}{}
+\comment{%
+    \begin{minipage}{\linewidth}%
+    if $Q_t$ is even:
+    \begin{itemize}
+    \item it holds $2Q = Q_t$
+    \item with $U := U_t$ it holds
+    $$\begin{aligned}
+    R_pL + X_1 &= Q_tS_p + U_t \\
+               &= 2Q\cdot S_p + U_t \\
+               &= Q\cdot 2S_p + U
+    \end{aligned}$$
+    \end{itemize}%
+    \end{minipage}%
+}
+\comment{%
+    \begin{minipage}{\linewidth}%
+    if $Q_t$ is odd:
+    \begin{itemize}
+    \item it holds $2Q + 1 = Q_t$
+    \item with $U := U_t + S_p$ it holds
+    $$\begin{aligned}
+    R_pL + X_1 &= Q_tS_p + U_t \\
+               &= (2Q+1)S_p + U_t \\
+               &= 2Q\cdot S_p + S_p + U_t \\
+               &= Q\cdot 2S_p + U
+    \end{aligned}$$%
+    \end{itemize}%
+    \end{minipage}%
+}
+\statement{1}{}{correct division remainder}
+\statement{2}{if $Q_t$ is odd then}{}
+\statement{3}{$U := U_t + S_p$}{}
+\statement{2}{else}{if $Q_t$ is even}
+\statement{3}{$U := U_t$}{}
+\statement{0}{}{$R_t := U L + X_0 - Q^2$}
+\statement{1}{$Q_{sqr} := Q^2$}{}
+\statement{1}{$R_t := UL + X_0 - Q_{sqr}$}{}
+\statement{0}{}{$S_t := S L + Q$}
+\statement{1}{$S_t := S_p L + Q$}{}
+%\comment{it holds $S < N$ with $N = HL$}
+\statement{0}{}{correct return values}
+\statement{1}{if $R_t < 0$ then}{}
+\statement{2}{}{$R := R_t + 2S_t - 1$}
+\statement{3}{$R_{tt} := R_t + 2S_t$}{}
+\statement{3}{$R := R_{tt} - 1$}{}
+\statement{2}{$S := S_t - 1$}{}
+\statement{1}{else}{if $R_t \ge 0$}
+\statement{2}{$R := R_t$}{}
+\statement{2}{$S := S_t$}{}
+\end{pseudocode}
+\end{algo}
+
+\subsection{3rd-level Pseudo Code}
+
+\begin{algo}
+\Syntax $S, rB^n+R_o := \mpnSqrtRemImpl(X, n)$
+
+\Input
+\begin{enumerate}
+\item normalized input number $X$
+\item the exact half of its minimal length $n$
+    \begin{itemize}
+    \item Thus the minimal length of $X$ must be even.
+    \end{itemize}
+\end{enumerate}
+
+\PreConditions
+\begin{enumerate}
+\item Normalization Condition
+    \begin{itemize}
+    \item with $2n$ the minimal length of $X$
+    \end{itemize}
+    \begin{enumerate}
+    \item $X \ge \frac{B^{2n}}{4}$
+    \item $X < B^{2n\strut}$
+    \end{enumerate}
+\end{enumerate}
+
+\Output
+\begin{enumerate}
+\item square root $S$
+    \begin{itemize}
+    \item will have length $n$
+    \end{itemize}
+\item square root remainder without its overflow bit $R_o$
+    \begin{itemize}
+    \item will have length $n$
+    \end{itemize}
+\item square root remainder overflow bit $r$
+\end{enumerate}
+
+\PostConditions
+\begin{enumerate}
+\item Integer Square Root Condition:
+    \begin{enumerate}
+    \item $S^2 \le X$
+    \item $(S+1)^2 > X$
+    \end{enumerate}
+\item Integer Square Root Remainder Condition: $S^2 + rB^n + R_o = X$
+\item $S$ has length $n$:
+    \begin{enumerate}
+    \item $S \ge 0$
+    \item $S < B^n$
+    \end{enumerate}
+\item $R_o$ has length $n$:
+    \begin{enumerate}
+    \item $R_o \ge 0$
+    \item $R_o < B^n$
+    \end{enumerate}
+\end{enumerate}
+
+\Algorithm
+\begin{pseudocode}
+\statement{0}{}{%
+    \begin{minipage}{\linewidth}%
+    compute $H,L$ such that
+    \begin{itemize}
+    \item $HL = N$
+    \item $H \ge L$
+    \item $X = X_{23}L^2 + X_1L+ X_0$
+    \end{itemize}
+    \end{minipage}%
+}
+\statement{1}{$l := \lfloor\frac{n}{2}\rfloor$}{$L:=B^l$}
+\statement{1}{$h := n - l$}{$H:=B^h$}
+\comment{%
+    it holds $X_0 = X\mod L$\\
+    it holds $X_1 = \lfloor\frac{X}{L}\rfloor\mod L$\\
+    it holds $X_{23} = \frac{X}{L^2}$
+}
+\comment{%
+    $X_0$ has length $l$\\
+    $X_1$ has length $l$\\
+    $X_{23}$ has the minimal length $2h$
+}
+\statement{0}{}{$S_p, R_p := \SqrtRemWrap(X_{23})$}
+\comment{%
+    \begin{minipage}{\linewidth}
+    $X_{23}$ is normalized:
+    \begin{itemize}
+    \item Its most significant limb is equal to that of $X$.
+    \item Its minimal length $2h$ is even.
+    \end{itemize}%
+    \end{minipage}%
+}
+\statement{1}{$S_p, r_pH+R_{po} := \mpnSqrtRemImpl(X_{23}, h)$}{}
+\comment{%
+    $S_p$ has length $h \iff S_p < H$\\
+    $R_{po}$ has length $h \iff R_{po} < H$
+}
+\comment{$R_p = r_pH + R_{po}$}
+\statement{0}{}{$Q, U := \DivRem(R_p L+X_1, 2S_p)$}
+\statement{1}{}{$Q_t, U_t := \DivRem(R_p L + X_1, S_p)$}
+\comment{%
+    We do not have $R_p$ at hand.
+    Also $R_p$ can be $H$ and thus may have a minimal length of $h+1$,
+    which would make things a bit more complicate.
+    We only have at hand $r_p$ and $R_{po} < N$ seperated.
+    Thus we like to execute something like $\DivRem(R_{po}L + X_1, S_p)$ .
+}
+\comment{\begin{minipage}{\linewidth}
+    Suppose, we neglect the next subtraction.
+    If $r_p = 1 \iff R_p \ge H$,
+    then $R_{po} = R_p - H$ and
+    $$\begin{aligned}
+    Q_t, U_t &:= \DivRem\big(R_{po}L + X_1, S_p\big) \\
+    &= \DivRem\big((R_p - H)L + X_1, S_p\big) \\
+    \iff Q_t S_p + U_t 
+    &= (R_p - H)L + X_1 \\
+    &= R_p L - HL + X_1 \\
+    &= R_p L + X_1 - N
+    \end{aligned}$$
+    which is not desired.
+\end{minipage}}
+\comment{\begin{minipage}{\linewidth}
+    How can we manipulate the dividend $R_{po}L + X_1$,\\such that\\
+    $\text{manageable side effect} + Q_t S_p + U_t = \text{manipulated}$ ?
+\end{minipage}}
+\comment{\begin{minipage}{\linewidth}
+    Observe:\\
+    If we subtract $S_pL$ from the dividend, then the quotient is smaller by $L$ (manageable side effect).
+\end{minipage}}
+\comment{\begin{minipage}{\linewidth}
+    Observe:
+    \begin{itemize}
+    \item Because $R_p \le 2S_p = S_p + S_p$ and $S_p < H$, is
+          $$\begin{aligned}
+              & R_p < S_p + H \\
+          \iff& R_p - H < S_p \\
+          \iff& R_p - H - S_p = R_{po} - S_p < 0
+          \end{aligned}$$
+    \item At this subtraction occurs an underflow ($+H$).
+          Thus $R_{po} - S_p$ is in reality
+          $R_p - H - S_p + H = R_p - S_p$ .
+    \end{itemize}
+\end{minipage}}
+\comment{\begin{minipage}{\linewidth}
+    Conclusion:
+    \begin{itemize}
+    \item If $R_p \ge H\iff r_p = 1$, then we replace $R_{po}$ by $R_{po} - S_p$
+          and the \emph{obtained} quotient $q_tL+Q_{to}$ is smaller than
+          the \emph{required} quotient $Q_t$ by $L$ .
+    \item The $+H$ by the underflow propagates a borrow bit to the left
+          and -- as a nice side effect -- mathematical precisely cancels $r_p$ .
+    \end{itemize}
+\end{minipage}}
+\comment{
+    Check of this Idea:
+    $$\begin{aligned}
+     q_{t,ob}L+Q_{to}, U_t
+    &:= \DivRem\big((R_p - S_p)L + X_1, S_p\big) \\
+    \iff (q_{t,ob}L+Q_{to})S_p + U_t
+    &= (R_p - S_p)L + X_1 \\
+    &= R_pL - S_pL + X_1 \\
+    \iff (q_{t,ob}L+Q_{to})S_p + S_pL+ U_t &= R_pL + X_1 \\
+    = \big((q_{t,ob}+1)L+Q_{to}\big)S_p + U_t \\
+    \iff (q_{t,ob}+1)L+Q_{to}, U_t &=  \DivRem(R_pL + X_1, S_p) \\
+    &=: q_tL+Q_{to}, U_t
+    \end{aligned}$$
+}
+\statement{2}{if $r_p > 0$ then}{}
+\statement{3}{$R_{po} := R_{po} - S_p$}{actually we would must also $r_p := 0$}
+\comment{$R_{po}L + X_1$ has length $h + l = n$}
+\statement{2}{$q_{t,ob}L+Q_{to}, U_t := \mpnDivRem(R_{po}L + X_1, S_p)$}{}
+\comment{\begin{minipage}{\linewidth}%
+    according to the postconditions of $\mpnDivRem()$
+    \begin{itemize}
+    \item $Q_{to} < L$, because $Q_{to}$ has length $l = n - h = (h + l) - h$
+    \item $U_t < S_p \implies U_t < H$, because $U_t$ has length $h$\\(same as the divisor $S_p$)
+    \item $q_{t,ob} = 0\text{ or }1$
+    \end{itemize}
+\end{minipage}}
+\comment{%
+    If $r_p > 0 \iff r_p = 1 \iff R_p \ge H$,
+    then the \emph{required} $q_t$ is bigger than the \emph{obtained} $q_{t,ob}$ by $1$ .
+}
+\statement{2}{$q_t := q_{t,ob} + r_p$}{%
+    To reflect this in reality we, just add $r_p = 1$ to $q_{t,ob}$ .\\
+    If $r_p = 0 \iff R_p = R_{po}$, then the addition is useless.
+}
+\comment{memorize $Q_t = q_tL + Q_{to}$}
+\comment{memorize $q_t = 0\text{ or }1\text{ or }2$}
+\comment{%
+    it holds
+    $$\begin{aligned}
+    Q_tS_p + U_t &= R_pL + X_1 \\
+    \iff (q_tL + Q_{to})S_p + U_t &= (r_pH + R_{po})L + X_1
+    \end{aligned}$$
+}
+\statement{1}{}{$Q := \lfloor\frac{Q_t}{2}\rfloor$}
+\statement{2}{$Q_o := Q_{to}\ \texttt{>>}\ 1$}{%
+    $Q_o$ has length $l$, because $Q_{to}$ has length $l$ .%
+}
+\statement{2}{$Q_o[l-1] := \big((q_t \band 1) \shr (b-1)\big) \bor Q_o[l-1]$}{%
+    The least significant bit of $q_t$ as it shifts right floats
+    into the most significant bit of the last limb of $Q_o$.\\
+    Because $Q_o$ has length $l$, the last limb is at index $l-1$. (zero-based index)
+}
+\statement{2}{$q := q_t\ \texttt{>>}\ 1$}{%
+    memorize $q = 0\text{ or }1$ .
+}
+\comment{memorize $Q = qL + Q_o$}
+\statement{1}{}{correct division remainder}
+\statement{2}{if $Q_{to} \band 1 = 1$ then}{if $Q_t$ is odd then}
+\statement{3}{$uH+U_o := U_t + S_p$}{$U := U_t + S_p$}
+\statement{2}{else}{if $Q_t$ is even $\iff$ if $Q_{to} \band 1 = 0$}
+\statement{3}{}{$U := U_t$}
+\statement{4}{$U_o := U_t$}{}
+\statement{4}{$u := 0$}{}
+\comment{$U_o$ has length $h$ $\iff$ $U_o < H$}
+\statement{0}{}{$R_t := UL + X_0 - Q^2$}
+\statement{1}{}{$Q_{sqr} := Q^2$}
+\comment{%
+    Recap $Q \le L$ (see research paper)\\
+    Thus either $q = 0$ or $Q_o = 0$ or both $= 0$, but never together $> 0$ .\\
+    Thus always $qQ_o = 0$ .
+}
+\comment{%
+    $$\begin{aligned}
+    Q^2 &= (qL+Q_o)^2 \\
+    &= qL^2 + 2qLQ_o + Q_o^2 \\
+    &= qL^2            + Q_o^2 \\
+    &=: qL^2 + Q_{o,sqr}
+    \end{aligned}$$
+    See how $q$ remains the same in $Q^2$ .
+}
+\statement{2}{$Q_{o,sqr} := Q_o^2$}{}
+\comment{%
+    $Q_{o,sqr}$ has length $2l$, because $Q_o$ has length $l$ .\\
+    $Q_o < L \iff Q_o^2 < L^2$
+}
+\comment{Memorize $Q_{sqr} = qL^2 + Q_{o,sqr}$}
+\statement{1}{}{$R_t := UL + X_0 - Q_{sqr}$}
+\comment{$U_oL + X_0$ has length $n = h + l$ .}
+\comment{%
+    $$\begin{aligned}
+    R_t & = (UL+X_0)-Q_{sqr} \\ 
+    = r_tN + R_{to} &:= (uH + U_o)L + X_0 - qL^2 - Q_{o,sqr} \\
+    &= uHL - qL^2 +  U_oL + X_0    - Q_{o,sqr} \\
+    &= uN  - qL^2 + (U_oL + X_0)   - Q_{o,sqr}
+    \end{aligned}$$
+}
+\statement{2}{$sub\_borrow, R_{to} := \mpnSubN(U_oL + X_0,\;Q_{o,sqr},\;2l)$}{%
+    $\mpnSubN(X,Y,n)$ subtracts the $n$ least significant limbs of $X$ and $Y$.\\
+    It leaves other limbs untouched. Thus a borrow is still returned.
+}
+\comment{currently $R_{to}$ has length $2l$}
+\statement{2}{}{assign borrows to their correct place}
+\comment{$r_t$ is has the meaning of a carry, but can be negative.}
+\statement{3}{if $h = l$ then}{$\iff$ if $n$ is even}
+\comment{%
+    $U_oL + X_0$ has length $h + l = n$ .\\
+    $Q_{o,sqr}$ has  length $2l = n$ .\\
+    Thus in this case $U_oL+X_1$ and $Q_{o,sqr}$ have the same length.\\
+    Thus in this case $sub\_borrow$ goes into the carry $r_t$ .\\
+    (Thus not $n$ but $2l$ is provided to $\mpnSubN()$ .)
+}
+\comment{%
+    Because $R_{to}$ has length $2l$ , $-qL^2$ also goes into the carry $r_t$ .
+}
+\statement{4}{$r_t := u - sub\_borrow - q$}{}
+\statement{3}{else}{if $l + 1 = h$ $\iff$ if $n\text{ is odd}$}
+%\comment{thus $2l + 1 = n$}
+\comment{\begin{minipage}{\linewidth}%
+    $U_oL + X_1$ has length $h + l = n = 2l + 1$ .\\
+    $Q_{o,sqr}$ has length $2l$ .\\
+    So $U_oL + X_1$ has one limb more than $Q_{o,sqr}$.\\
+    Thus to complete the subtraction $(U_oL + X_0) - Q_{o,sqr}$ the $sub\_borrow$ must borrow
+    from the last (and still untouched) limb of $U_oL+X_0$
+    forming the last limb of $R_{to}$ .\\
+    This may delivers the actual borrow.
+\end{minipage}}
+\comment{%
+    Because $R_{to}$ has length $2l$ ,
+    $-qL^2$ also goes into the last (and still untouched) limb of $U_oL+X_0$
+    forming the last limb of $R_{to}$ .%
+}
+\statement{4}{$actual\_borrow, R_{to}[2l] := (U_oL+X_0)[2l] - sub\_borrow - q$}{%
+    The last limb of $U_oL+X_0$ is at index $2l$ . (zero-based index)%
+}
+\statement{4}{$r_t := u - actual\_borrow$}{}
+\comment{%
+    Now if $r_t$ is negative, then this stands therefore,
+    that $R_t = (UL+X_o) - Q^2$ is negative.%
+}
+\comment{finally $R_{to}$ has a length of $n$}
+\statement{0}{}{$S_t := SL + Q$}
+\statement{1}{}{%
+    $$\begin{aligned}
+    S_t &:= S_p L + Q \\
+    = s_tN + S_{to} &:= S_pL + qL + Q_o \\
+    = s_tN + S_{to,high}L + Q_o  &:= (S_p + q)L + Q_o
+    \end{aligned}$$%
+}
+\statement{2}{$s_tH + S_{to,high} := S_p +q$}{Note: $N = HL \iff n = h+l$}
+\comment{$S_{o,high}$ as length $h$, because $S_p$ has length $h$ .}
+\statement{2}{$S_{to} := S_{to,high}L + Q_o$}{}
+\comment{$S_{to}$ as length $n = h + l$, because $S_{to,high}$ has length $h$ and $Q_o$ has length $l$.}
+\comment{%
+    We can only execute these statements after 3.3.1.1. , because until including 3.3.1.1.
+    $S_p$ (and not $S_p + q$) is still required
+    and $S_p$ is stored at memory, which will become $S_{to}$ here.
+}
+\statement{0}{}{correct return values}
+\statement{1}{if $r_t < 0$ then}{if $R_t < 0$ then}
+\statement{2}{}{$R := R_t + 2S_t - 1$}
+\statement{3}{}{$R_{tt} := R_t + 2S_t$}
+\statement{4}{$r_{tt}N+R_{tto} := R_{to} + 2S_{to}$}{$R_{tto}$ has length $n$ .}
+\statement{4}{$r_{tt} := r_{tt} + 2s_t$}{}
+\statement{3}{}{$R := R_{tt} - 1$}
+\statement{4}{$temp\_borrow,R_o:=R_{tto}-1$}{return this $R_o$}
+\statement{4}{$r:=r_{tto}-temp\_borrow$}{return this $r$}
+\statement{2}{}{$S := S_t - 1$}
+\statement{3}{$temp\_borrow,S_o:=S_{to}-1$}{}
+\statement{3}{$s:=s_t-temp\_borrow$}{}
+\statement{1}{else}{else if $R_t \ge 0$ $\iff$ else if $r_t \ge 0$}
+\statement{2}{$R := R_t$}{}
+\statement{2}{$S := S_t$}{}
+\end{pseudocode}
+
+- 6. correct return values:
+    - 1\. if $R_t < 0$ then
+        - 1. if $r_t < 0$ then
+            - 1. $R := R_t + 2S_t - 1$
+                - 1. $R_{tt} := R_t + 2S_t$
+                    - $= r_t N + R_{to} + 2(s_t N + S_{to})$<br>
+                      $= (r_t + 2s_t)N + R_{to} + 2S_{to}$
+                    - 1. $r_{tto}' N + R_{tto} := R_{to} + 2S_{to}$
+                    - 2. $r_{tto} := r_{tto}' + 2s_t$
+                - 2. $R := R_{tt} - 1$
+                    - $= r_{tt} N + R_{tto} -1$
+                    - 1. $temp\_borrow, R_o := R_{tto} -1$
+                    - 2. $r := r_{tto} - temp\_borrow$
+            - 2.$S := S_t - 1$
+    - 2. else
+        - if $R_t \ge 0$
+        - 1. $R := R_t$
+        - 2. $S := S_t$
+\end{algo}
+
+\end{document}
+
+
+
+\end{document}
